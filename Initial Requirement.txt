@@ -1,0 +1,63 @@
+Need to build fully modular multi-user web app and mobile app solution designed for weighing scale service provider. 
+Same user should not be able to login from two devices at the same time.
+This has to be developed as web and mobile app to support android and ios.
+A weigh scale provider can have multiple warehouses and should be identifiable uniquely.
+The system must capture vehicle weights empty also called as tare weight and loaded weight via serial port connected scales.
+The application should support multiple weighing scales and IP cameras so that system can be flexible for deployment accross different weighing stations.
+The application should scan available serial ports and allow the user to configure the port to be used for data capture.
+Each warehouse can have one or more bays from where items will be loaded on to the vehicle.
+Each warehouse will have people responsible for different roles like operator, planner, handler, loader,etc.,
+There are multiple steps involved from the time a vehicle approaches a weigh scale unit to the time it leaves after completing all the steps.
+The time at the beginning of each step and the time taken to complete that step has to be tracked with and captured in 12 hours format along with the seconds.
+The provider should be allowed to configure a standard time, in minutes, expected to take for each step.
+When a particular step deviates and takes more time than that then it should show up in yellow or red highlighted color based on whether the time deviation is little or more.
+This little or more  and the color for each deviation whether minor, medium or more.
+System should provide for maintaining a separate table for customers, employees and their roles, prescribed time limit between steps, color configuration for any time deviation from that 
+All the above should be configurable by a admin level person only.
+ 
+The entire process is as follows :
+
+-When a vehicle approaches the provider's warehouse , at the entry point itself an operator who will be an employee at the warehouse decides whether the vehicle can be allowed inside for the weighin process.The operator can reject also due to reasons like payment balances, other technical and infrastructure constraints. The system should allow the operator to adjust the required charges against any advance amount already collected or subject to permissable credit limits for each customer.
+
+-When the operator decides it can be allowed a slip is generated cotaining the following details : Receipt No, Entry time, Vehicle Number , Driver Name, Mobile no,1st Weight S.No and entr weight. A qr code also should appear at the bottom of the slip which when scanned should produce the entry capture at entry point.
+
+A weighing operation should be able to capture empty (tare) and loaded weights accurately with all below transaction details :
+
+-Vehicle registration number (mandatory)
+-Vehicle type (e.g., truck, lorry)
+-Transaction date (default: current date; editable by operator)
+-Tare weight (empty vehicle)
+-Loaded weight (vehicle with load)
+-Net load weight (auto-calculated)
+-Customer name (searchable from master or new entry)
+-Material loaded (free text)
+-Customer location (city/place name, free text)
+-Weighing charges (numeric, operator-entered or auto-calculated based on configurable rates)
+-Payment mode (selected from predefined list: cash, GPay, net banking, IMPS, etc.)
+
+The tare weight for any vehicle should be valid for a given time period only which should be configurable for each customer and their vehicle(s)
+
+-A weighing operator should be able to capture new customer details master which would normally contain the following details : Customer name, Address details , contact number 
+-The weighing operator should also send each transaction details to customers via email, telegram or whatsapp. This feature should be configurable
+The system should allow configuring of weighing scales, ip cameras and payment modes to adapt to the hardware and business rules of each weighing station
+
+-Then the operator assigns that task to a planner who will plan the entire planning activity from entry till the vehicle is completely loaded with all client requested items.
+-There can be one or more items to be loaded and each of different weight. Weight to be captured in Kilograms.
+-There can be one or more bays from which these items can be loaded. 
+-Planner will assign each vehicle to another person who will be the supervisor for that warehouse , responsible for loading the required items from all the items and the planned weight from all the bays planned.
+-The supervisor in-turn will assign one or more persons known as handlers to load the items from each bay. A handler will be responsible for one or more bays who will ensure that the planned items and required weight are loaded from each bay.
+-Weight will be captured before and after items are being loaded from each bay in a warehouse.
+-Each place from where an item is being loaded will be treated as first, second and third weighment and so on.
+-After all the items have been loaded it has to go the billing section where the final weight along with the charges involved will be prepared.
+-The total weight planned and the final weight after all items should match for individual item based and total weights planned respectively.
+
+
+Non-functional and modularity related requirement : 
+
+The solution should be deployable in an on-premise network and in any cloud environment also.
+Each functional module like weighing, customer, notifications shall be independently deployable , configurable and replaceable preferable via API-driven interfaces
+Data persistance - Currently weighing activity, receipt generation for it, customer information is all maintained in a combination of excel sheet and other documents manually. The system should allow to import this when this applicatio is initially deployed for the customer chageover to this system.
+Error Handling : All hardware communication failures of scale , camera or any other runtime functionality related error should be logged. Which of these activities have to be logged should be configurable based on whether it is production or dev environment
+
+
+

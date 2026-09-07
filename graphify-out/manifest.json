@@ -1,0 +1,110 @@
+{
+  "package.json": {
+    "mtime": 1788600725.4983137,
+    "seen": 1788689580.515705,
+    "ast_hash": "4c23b8b848c189a4f6538226fea69db0",
+    "semantic_hash": "4c23b8b848c189a4f6538226fea69db0"
+  },
+  "src/App.tsx": {
+    "mtime": 1788600725.7814147,
+    "seen": 1788689580.5157123,
+    "ast_hash": "64ef5164b22e667863b1044cf8af0fa5",
+    "semantic_hash": "64ef5164b22e667863b1044cf8af0fa5"
+  },
+  "src/components/Sidebar.tsx": {
+    "mtime": 1788600726.0952542,
+    "seen": 1788689580.515716,
+    "ast_hash": "ced3357250fec89f63a0c65a64404e75",
+    "semantic_hash": "ced3357250fec89f63a0c65a64404e75"
+  },
+  "src/main.tsx": {
+    "mtime": 1788600725.8446903,
+    "seen": 1788689580.5157194,
+    "ast_hash": "92712522e16458cc846b976ea78fb6b6",
+    "semantic_hash": "92712522e16458cc846b976ea78fb6b6"
+  },
+  "src/pages/DashboardPage.tsx": {
+    "mtime": 1788600726.3889003,
+    "seen": 1788689580.5157228,
+    "ast_hash": "0550886c33f9de01a6f368703bc2b80b",
+    "semantic_hash": "0550886c33f9de01a6f368703bc2b80b"
+  },
+  "src/pages/LoginPage.tsx": {
+    "mtime": 1788600726.2980537,
+    "seen": 1788689580.5157256,
+    "ast_hash": "96a30e5f70ff4f3debe1e430ac4290bf",
+    "semantic_hash": "96a30e5f70ff4f3debe1e430ac4290bf"
+  },
+  "src/pages/MasterDataPage.tsx": {
+    "mtime": 1788600726.6163278,
+    "seen": 1788689580.5157287,
+    "ast_hash": "969a1066d3c887286382ffd2410f4e6c",
+    "semantic_hash": "969a1066d3c887286382ffd2410f4e6c"
+  },
+  "src/pages/OtherPages.tsx": {
+    "mtime": 1788600726.6821485,
+    "seen": 1788689580.515731,
+    "ast_hash": "2d2b884533ce0d5b5bad57e22ee1b484",
+    "semantic_hash": "2d2b884533ce0d5b5bad57e22ee1b484"
+  },
+  "src/pages/WeighInPage.tsx": {
+    "mtime": 1788600726.4801104,
+    "seen": 1788689580.515734,
+    "ast_hash": "159cea5b8a5c718066d12f8d8ca63ed2",
+    "semantic_hash": "159cea5b8a5c718066d12f8d8ca63ed2"
+  },
+  "src/pages/WeighOutPage.tsx": {
+    "mtime": 1788600726.549523,
+    "seen": 1788689580.5157366,
+    "ast_hash": "ac4d77030a9b29fe3e2612f794ecfd85",
+    "semantic_hash": "ac4d77030a9b29fe3e2612f794ecfd85"
+  },
+  "src/store/appStore.ts": {
+    "mtime": 1788600726.1498356,
+    "seen": 1788689580.5157392,
+    "ast_hash": "a41a00aae945159e597948386d14d8a8",
+    "semantic_hash": "a41a00aae945159e597948386d14d8a8"
+  },
+  "src/types/index.ts": {
+    "mtime": 1788600726.0281484,
+    "seen": 1788689580.5157423,
+    "ast_hash": "086cf1fa094ebf1f72b117accf2757f3",
+    "semantic_hash": "086cf1fa094ebf1f72b117accf2757f3"
+  },
+  "src/utils/cn.ts": {
+    "mtime": 1788600725.9743607,
+    "seen": 1788689580.5157444,
+    "ast_hash": "d9837f38cc05303254571985e3164050",
+    "semantic_hash": "d9837f38cc05303254571985e3164050"
+  },
+  "tsconfig.json": {
+    "mtime": 1788600725.5490856,
+    "seen": 1788689580.5157468,
+    "ast_hash": "c43fbad465f837b222ed6f4b3862df3a",
+    "semantic_hash": "c43fbad465f837b222ed6f4b3862df3a"
+  },
+  "vite.config.ts": {
+    "mtime": 1788600725.5987377,
+    "seen": 1788689580.5157495,
+    "ast_hash": "2ae197243ce8bb3a3f1fe6474ec7bd68",
+    "semantic_hash": "2ae197243ce8bb3a3f1fe6474ec7bd68"
+  },
+  "Changes required.txt": {
+    "mtime": 1788619517.5074959,
+    "seen": 1788689580.5157518,
+    "ast_hash": "fd5e2b8eaee72b923f6f537942451a83",
+    "semantic_hash": "fd5e2b8eaee72b923f6f537942451a83"
+  },
+  "Initial Requirement.txt": {
+    "mtime": 1788493877.5580873,
+    "seen": 1788689580.5157545,
+    "ast_hash": "561a57878faee84f0ff9818b524b12d9",
+    "semantic_hash": "561a57878faee84f0ff9818b524b12d9"
+  },
+  "index.html": {
+    "mtime": 1788600725.4121487,
+    "seen": 1788689580.515757,
+    "ast_hash": "40f3d747a11206a02bbbc3f759c4ac53",
+    "semantic_hash": "40f3d747a11206a02bbbc3f759c4ac53"
+  }
+}

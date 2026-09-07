@@ -1,0 +1,380 @@
+{
+  "communities": {
+    "0": [
+      "src_components_sidebar",
+      "src_components_sidebar_menugroup",
+      "src_components_sidebar_menugroups",
+      "src_components_sidebar_menuitem",
+      "src_components_sidebar_sidebar",
+      "src_components_sidebar_sidebarprops",
+      "src_pages_dashboardpage",
+      "src_pages_dashboardpage_dashboardpage",
+      "src_pages_dashboardpage_dashboardpageprops",
+      "src_pages_otherpages",
+      "src_pages_otherpages_aboutpage",
+      "src_pages_otherpages_auditlogpage",
+      "src_pages_otherpages_auditlogpageprops",
+      "src_pages_otherpages_backuppage",
+      "src_pages_otherpages_dailysummarypage",
+      "src_pages_otherpages_dailysummarypageprops",
+      "src_pages_otherpages_reportspage",
+      "src_pages_otherpages_reportspageprops",
+      "src_pages_otherpages_settingspage",
+      "src_pages_otherpages_settingspageprops",
+      "src_pages_otherpages_ticketspage",
+      "src_pages_otherpages_ticketspageprops",
+      "src_pages_otherpages_transactionspage",
+      "src_pages_otherpages_transactionspageprops",
+      "src_pages_otherpages_userform",
+      "src_pages_otherpages_userspage",
+      "src_pages_otherpages_userspageprops",
+      "src_pages_weighoutpage",
+      "src_pages_weighoutpage_products_unit",
+      "src_pages_weighoutpage_weighoutpage",
+      "src_pages_weighoutpage_weighoutpageprops",
+      "src_types_index",
+      "src_types_index_appsettings",
+      "src_types_index_auditlog",
+      "src_types_index_dailysummary",
+      "src_types_index_pageid",
+      "src_types_index_payment",
+      "src_types_index_paymentmethod",
+      "src_types_index_ticket",
+      "src_types_index_ticketstatus",
+      "src_types_index_tickettype",
+      "src_types_index_transaction",
+      "src_types_index_transactionstatus",
+      "src_types_index_user",
+      "src_types_index_userrole",
+      "src_utils_cn",
+      "src_utils_cn_cn"
+    ],
+    "1": [
+      "ref_dom",
+      "ref_dom_iterable",
+      "ref_es2020",
+      "ref_node",
+      "ref_src",
+      "ref_vite_config_ts",
+      "tsconfig",
+      "tsconfig_compileroptions",
+      "tsconfig_compileroptions_allowimportingtsextensions",
+      "tsconfig_compileroptions_baseurl",
+      "tsconfig_compileroptions_isolatedmodules",
+      "tsconfig_compileroptions_jsx",
+      "tsconfig_compileroptions_lib",
+      "tsconfig_compileroptions_module",
+      "tsconfig_compileroptions_moduleresolution",
+      "tsconfig_compileroptions_noemit",
+      "tsconfig_compileroptions_nofallthroughcasesinswitch",
+      "tsconfig_compileroptions_nounusedlocals",
+      "tsconfig_compileroptions_nounusedparameters",
+      "tsconfig_compileroptions_paths",
+      "tsconfig_compileroptions_resolvejsonmodule",
+      "tsconfig_compileroptions_skiplibcheck",
+      "tsconfig_compileroptions_strict",
+      "tsconfig_compileroptions_target",
+      "tsconfig_compileroptions_types",
+      "tsconfig_compileroptions_usedefineforclassfields",
+      "tsconfig_include"
+    ],
+    "2": [
+      "src_app",
+      "src_app_app",
+      "src_main",
+      "src_pages_loginpage",
+      "src_pages_loginpage_loginpage",
+      "src_pages_loginpage_loginpageprops",
+      "src_pages_weighinpage",
+      "src_pages_weighinpage_weighinpage",
+      "src_store_appstore",
+      "src_store_appstore_defaultsettings",
+      "src_store_appstore_formatdate",
+      "src_store_appstore_formatdatetime",
+      "src_store_appstore_formatnow",
+      "src_store_appstore_generateauditlog",
+      "src_store_appstore_generatedailysummary",
+      "src_store_appstore_generatesampletickets",
+      "src_store_appstore_generatetransactions",
+      "src_store_appstore_nextid",
+      "src_store_appstore_nextticketno",
+      "src_store_appstore_nexttransno",
+      "src_store_appstore_samplecustomers",
+      "src_store_appstore_sampleproducts",
+      "src_store_appstore_samplesuppliers",
+      "src_store_appstore_sampleusers",
+      "src_store_appstore_samplevehicles"
+    ],
+    "3": [
+      "changes_required_approval_receipt",
+      "changes_required_billing_time",
+      "changes_required_delivery_order",
+      "changes_required_entry_point_capture",
+      "changes_required_in_time",
+      "changes_required_out_time",
+      "changes_required_planning_time",
+      "changes_required_warehouse_time",
+      "changes_required_weighment_stages",
+      "initial_requirement_billing_section",
+      "initial_requirement_charge_adjustment",
+      "initial_requirement_deviation_color_coding",
+      "initial_requirement_entry_rejection",
+      "initial_requirement_entry_slip",
+      "initial_requirement_item_loading",
+      "initial_requirement_planning_activity",
+      "initial_requirement_qr_code",
+      "initial_requirement_standard_time_configuration",
+      "initial_requirement_step_time_tracking",
+      "initial_requirement_weighment_sequence",
+      "initial_requirement_weight_reconciliation"
+    ],
+    "4": [
+      "clsx",
+      "lucide_react",
+      "package",
+      "package_dependencies",
+      "package_dependencies_clsx",
+      "package_dependencies_lucide_react",
+      "package_dependencies_react",
+      "package_dependencies_react_dom",
+      "package_dependencies_tailwind_merge",
+      "package_name",
+      "package_private",
+      "package_scripts",
+      "package_scripts_build",
+      "package_scripts_dev",
+      "package_scripts_preview",
+      "package_type",
+      "package_version",
+      "react",
+      "react_dom",
+      "tailwind_merge"
+    ],
+    "5": [
+      "initial_requirement_customer_location",
+      "initial_requirement_customer_name",
+      "initial_requirement_deployment_model",
+      "initial_requirement_hardware_configuration",
+      "initial_requirement_ip_camera",
+      "initial_requirement_loaded_weight",
+      "initial_requirement_material_loaded",
+      "initial_requirement_modular_architecture",
+      "initial_requirement_net_load_weight",
+      "initial_requirement_payment_mode",
+      "initial_requirement_serial_port_configuration",
+      "initial_requirement_serial_port_scale",
+      "initial_requirement_tare_weight",
+      "initial_requirement_transaction_date",
+      "initial_requirement_transaction_notification",
+      "initial_requirement_vehicle_registration_number",
+      "initial_requirement_vehicle_type",
+      "initial_requirement_weighing_charges",
+      "initial_requirement_weighing_transaction"
+    ],
+    "6": [
+      "package_devdependencies",
+      "package_devdependencies_tailwindcss",
+      "package_devdependencies_tailwindcss_vite",
+      "package_devdependencies_types_node",
+      "package_devdependencies_types_react",
+      "package_devdependencies_types_react_dom",
+      "package_devdependencies_typescript",
+      "package_devdependencies_vite",
+      "package_devdependencies_vite_plugin_singlefile",
+      "package_devdependencies_vitejs_plugin_react",
+      "tailwindcss",
+      "tailwindcss_vite",
+      "types_node",
+      "types_react",
+      "types_react_dom",
+      "typescript",
+      "vite",
+      "vite_plugin_singlefile",
+      "vitejs_plugin_react"
+    ],
+    "7": [
+      "src_pages_masterdatapage",
+      "src_pages_masterdatapage_customerform",
+      "src_pages_masterdatapage_customerspage",
+      "src_pages_masterdatapage_customerspageprops",
+      "src_pages_masterdatapage_productform",
+      "src_pages_masterdatapage_productspage",
+      "src_pages_masterdatapage_productspageprops",
+      "src_pages_masterdatapage_supplierform",
+      "src_pages_masterdatapage_supplierspage",
+      "src_pages_masterdatapage_supplierspageprops",
+      "src_pages_masterdatapage_vehicleform",
+      "src_pages_masterdatapage_vehiclespage",
+      "src_pages_masterdatapage_vehiclespageprops",
+      "src_pages_weighinpage_weighinpageprops",
+      "src_types_index_customer",
+      "src_types_index_product",
+      "src_types_index_supplier",
+      "src_types_index_vehicle"
+    ],
+    "8": [
+      "index_ws_series_app",
+      "initial_requirement_bay",
+      "initial_requirement_role_handler",
+      "initial_requirement_role_operator",
+      "initial_requirement_role_planner",
+      "initial_requirement_role_supervisor",
+      "initial_requirement_warehouse",
+      "initial_requirement_web_mobile_app",
+      "initial_requirement_weigh_scale_provider"
+    ],
+    "9": [
+      "initial_requirement_admin_configuration",
+      "initial_requirement_color_configuration_table",
+      "initial_requirement_customer_master",
+      "initial_requirement_data_migration",
+      "initial_requirement_employee_master",
+      "initial_requirement_role_master",
+      "initial_requirement_tare_weight_validity",
+      "initial_requirement_time_limit_table"
+    ],
+    "10": [
+      "vite_config",
+      "vite_config_dirname",
+      "vite_config_filename"
+    ],
+    "11": [
+      "initial_requirement_error_logging"
+    ],
+    "12": [
+      "initial_requirement_role_loader"
+    ],
+    "13": [
+      "initial_requirement_single_session_login"
+    ]
+  },
+  "cohesion": {
+    "0": 0.07955596669750231,
+    "1": 0.07407407407407407,
+    "2": 0.19666666666666666,
+    "3": 0.11904761904761904,
+    "4": 0.1,
+    "5": 0.10526315789473684,
+    "6": 0.10526315789473684,
+    "7": 0.1568627450980392,
+    "8": 0.2222222222222222,
+    "9": 0.25,
+    "10": 0.6666666666666666,
+    "11": 1.0,
+    "12": 1.0,
+    "13": 1.0
+  },
+  "gods": [
+    {
+      "id": "tsconfig_compileroptions",
+      "label": "compilerOptions",
+      "degree": 19
+    },
+    {
+      "id": "src_utils_cn_cn",
+      "label": "cn()",
+      "degree": 14
+    },
+    {
+      "id": "src_types_index_ticket",
+      "label": "Ticket",
+      "degree": 12
+    },
+    {
+      "id": "initial_requirement_weighing_transaction",
+      "label": "Weighing Transaction (Tare + Loaded Capture)",
+      "degree": 12
+    },
+    {
+      "id": "src_types_index_user",
+      "label": "User",
+      "degree": 9
+    },
+    {
+      "id": "src_types_index_dailysummary",
+      "label": "DailySummary",
+      "degree": 7
+    },
+    {
+      "id": "src_app_app",
+      "label": "App()",
+      "degree": 7
+    },
+    {
+      "id": "src_pages_weighinpage_weighinpageprops",
+      "label": "WeighInPageProps",
+      "degree": 6
+    },
+    {
+      "id": "src_types_index_customer",
+      "label": "Customer",
+      "degree": 6
+    },
+    {
+      "id": "src_types_index_product",
+      "label": "Product",
+      "degree": 6
+    }
+  ],
+  "surprises": [
+    {
+      "source": "Out Time (Entry Till Planning Done)",
+      "target": "Planning Activity (Entry to Fully Loaded)",
+      "source_files": [
+        "Changes required.txt",
+        "Initial Requirement.txt"
+      ],
+      "confidence": "AMBIGUOUS",
+      "relation": "semantically_similar_to",
+      "why": "ambiguous connection - not explicitly stated in source; connects across different repos/directories; semantically similar concepts with no structural link"
+    },
+    {
+      "source": "Approval Receipt at Entry Point",
+      "target": "Entry Point Approval/Rejection Decision",
+      "source_files": [
+        "Changes required.txt",
+        "Initial Requirement.txt"
+      ],
+      "confidence": "INFERRED",
+      "relation": "semantically_similar_to",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; semantically similar concepts with no structural link"
+    },
+    {
+      "source": "Billing Time",
+      "target": "Billing Section (Final Weight and Charges)",
+      "source_files": [
+        "Changes required.txt",
+        "Initial Requirement.txt"
+      ],
+      "confidence": "INFERRED",
+      "relation": "semantically_similar_to",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; semantically similar concepts with no structural link"
+    },
+    {
+      "source": "Entry Point Data Capture",
+      "target": "Entry Slip (Receipt No, Entry Time, Vehicle No, Driver, Mobile, 1st Weight)",
+      "source_files": [
+        "Changes required.txt",
+        "Initial Requirement.txt"
+      ],
+      "confidence": "INFERRED",
+      "relation": "semantically_similar_to",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; semantically similar concepts with no structural link"
+    },
+    {
+      "source": "In Time (Entry Time)",
+      "target": "Entry Slip (Receipt No, Entry Time, Vehicle No, Driver, Mobile, 1st Weight)",
+      "source_files": [
+        "Changes required.txt",
+        "Initial Requirement.txt"
+      ],
+      "confidence": "INFERRED",
+      "relation": "semantically_similar_to",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; semantically similar concepts with no structural link"
+    }
+  ],
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
+}

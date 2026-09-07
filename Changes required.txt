@@ -1,0 +1,23 @@
+Understand the application and this code base by going through the content in 'graphify-out' folder, here.
+
+Following changes are required in this application.
+
+A system admin role user to be created to be avaliable for the purpose of providing support. This will be highest level of control on the application.
+Normally a person with planner role will be the one who assigns the vehicle to a supervisor.
+This supervisor will be responsible for ensuring that required items in required weight are being loaded from specific bays.
+Each bay will have a handler incharge of hadling the loading and unloading activity.
+Rename the 'Weigh In' option as 'Loading' and 'Weigh Out' as 'Unloading'
+Before each loading activity , the previous weight , the weight added  in each bay and the gross weight should be displayed on the screen.
+Similarly for each unloading activity also the previous weight, the weight offloaded in each bay and the gross weight after unloading should be displayed on the screen.
+The 'Admin' user should be able configure whether 'Unloading' option is required to be available or not.
+Another interface for managing roles to be available. The roles in the user management page should be populated from this roles master table.
+The reports should allow taking reports of time taken taken between each stage , from one stage to another, from entry time to exit time and warehouse time.
+The currency utilized should be in Indian Rupees
+
+
+
+
+
+
+
+
