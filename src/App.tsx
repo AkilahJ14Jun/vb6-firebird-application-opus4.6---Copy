@@ -62,6 +62,7 @@ import {
 } from './store/appStore';
 
 // ── Page Components ─────────────────────────────────────────────────────
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Sidebar } from './components/Sidebar';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -122,6 +123,9 @@ export function App() {
 
   const handleSaveDeliveryOrder = (order: DeliveryOrderPlan) => {
     setDeliveryOrders(prev => [order, ...prev]);
+    if (order.vehicleEntryId) {
+      setVehicleEntries(prev => prev.map(e => e.id === order.vehicleEntryId ? { ...e, vehicleStatus: 'planned' as const, deliveryOrderId: order.id } : e));
+    }
   };
 
   const handleSaveMultiWeighmentSession = (sess: MultiWeighmentSession) => {
@@ -134,6 +138,24 @@ export function App() {
       }
       return [sess, ...prev];
     });
+
+    // Synchronize status, location, checking, and billing with delivery orders
+    setDeliveryOrders(prev => prev.map(d => {
+      if (d.id === sess.deliveryOrderId || d.doNumber === sess.doNumber) {
+        return {
+          ...d,
+          status: sess.status as any,
+          currentLocation: sess.currentLocation || d.currentLocation,
+          checkingStatus: sess.checkingStatus || d.checkingStatus,
+          checkerName: sess.checkerName || d.checkerName,
+          checkedAt: sess.checkedAt || d.checkedAt,
+          discrepancyNotes: sess.discrepancyNotes || d.discrepancyNotes,
+          billingSettled: sess.billingSettled ?? d.billingSettled,
+          exitedAt: sess.exitedAt || d.exitedAt,
+        };
+      }
+      return d;
+    }));
   };
 
   const navigateToPlanning = (entryId?: number) => {
@@ -235,6 +257,8 @@ export function App() {
             summary={dailySummary}
             user={currentUser}
             onNavigate={(p) => setActivePage(p as PageId)}
+            enableUnloading={settings.enableUnloading}
+            deliveryOrders={deliveryOrders}
           />
         );
 
@@ -412,7 +436,9 @@ export function App() {
       {/* Main content area (replaces MDI client area) */}
       <main className="flex-1 overflow-auto">
         <div className="p-6 max-w-[1400px] mx-auto">
-          {renderPage()}
+          <ErrorBoundary>
+            {renderPage()}
+          </ErrorBoundary>
         </div>
       </main>
     </div>

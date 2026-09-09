@@ -18,12 +18,13 @@
  * ============================================================================
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { VehicleEntry, Customer, Vehicle, Product, ApprovalStatus } from '@/types';
 import {
   formatTime12, formatTimeSlip, nextSlipNo, nextWgtSeqNo, formatNow, nextId
 } from '@/store/appStore';
 import { EntrySlipModal } from '@/components/EntrySlipModal';
+import { EntrySlipDocument } from '@/components/EntrySlipDocument';
 import { cn } from '@/utils/cn';
 import {
   LogIn, CheckCircle, XCircle, Clock, User, Phone,
@@ -128,6 +129,15 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
     c => c.name.toLowerCase() === customerName.toLowerCase()
   );
 
+  // ── Approved Slip Display State (Below Capture Live Weight button) ────
+  const [approvedSlipEntry, setApprovedSlipEntry] = useState<VehicleEntry | null>(null);
+  const slipContainerRef = useRef<HTMLDivElement>(null);
+  const [approvalAlert, setApprovalAlert] = useState<string | null>(null);
+
+  const handlePrintSlip = () => {
+    window.print();
+  };
+
   // ── Active Slip Modal ──────────────────────────────────────────────────
   const [activeSlipEntry, setActiveSlipEntry] = useState<VehicleEntry | null>(null);
 
@@ -199,6 +209,8 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
       firstWgtSeqNo,
       entryWeight: Number(entryWeight),
       approvalStatus,
+      vehicleStatus: approvalStatus === 'Approved' ? 'unplanned' : undefined,
+      currentLocation: approvalStatus === 'Approved' ? 'Entry Gate (Awaiting Planning)' : 'Entry Gate (Rejected)',
       rejectReason: finalRejectReason,
       operatorId,
       operatorName,
@@ -210,9 +222,15 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
 
     onSaveEntry(newEntry);
 
-    // If approved, automatically pop up the authentic thermal receipt!
+    // If approved, display the slip directly below the "Capture Live weight into Form" button!
     if (approvalStatus === 'Approved') {
-      setActiveSlipEntry(newEntry);
+      setApprovedSlipEntry(newEntry);
+      setApprovalAlert(`Entry approved! Gate slip #${newSlipNo} displayed below the live weight button.`);
+      setTimeout(() => {
+        slipContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+    } else {
+      setApprovalAlert(null);
     }
 
     // Reset form for next vehicle
@@ -232,6 +250,41 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Printable CSS injected for high precision thermal print */}
+      <style>{`
+        @media print {
+          body {
+            visibility: hidden !important;
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-entry-slip,
+          #printable-entry-slip * {
+            visibility: visible !important;
+          }
+          #printable-entry-slip {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 78mm !important;
+            margin: 0 !important;
+            padding: 3mm !important;
+            border: 1.5px solid #000 !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            z-index: 999999 !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
       {/* ── Page Header ────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -253,6 +306,22 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Approval Alert Notification */}
+      {approvalAlert && (
+        <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3.5 flex items-center justify-between text-xs text-emerald-900 shadow-sm animate-in fade-in slide-in-from-top-1">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span className="font-semibold">{approvalAlert}</span>
+          </div>
+          <button
+            onClick={() => setApprovalAlert(null)}
+            className="text-emerald-700 hover:text-emerald-900 font-bold px-2 py-0.5 rounded hover:bg-emerald-100"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* ── Top Metrics Bar ────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -284,7 +353,7 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
 
       {/* ── Main Entry Form & Scale Simulation ──────────────────────── */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Left Col: Entry Gate Scale Display & Quick Info */}
+        {/* Left Col: Entry Gate Scale Display & Entry Slip Output */}
         <div className="space-y-6">
           <div className="bg-white rounded-xl shadow border border-slate-200 p-5">
             <div className="flex items-center justify-between mb-3">
@@ -332,19 +401,92 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
                 </span>
               </div>
             )}
-          </div>
 
-          {/* Sample Receipt Reference Notice */}
-          <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-4 text-xs text-amber-900">
-            <h4 className="font-bold flex items-center gap-1.5 text-amber-800 mb-1">
-              <Printer className="w-4 h-4 text-amber-600" />
-              Physical Entry Slip Output
-            </h4>
-            <p className="text-amber-800/90 leading-relaxed">
-              Submitting an approved entry automatically renders the thermal entry receipt with 
-              <strong> Receipt No, Entry Time, Vehicle No, Driver, Mobile, 1st Wgt S.No, Entry Weight</strong>,
-              and <strong>Scannable QR Code</strong> matching the operational layout in <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">Entry slip.jpg</code>.
-            </p>
+            {/* ── Approved Entry Slip Section (Displayed directly below Capture Live Weight button) ── */}
+            {approvedSlipEntry ? (
+              <div
+                ref={slipContainerRef}
+                className="mt-5 pt-4 border-t border-slate-200 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300"
+              >
+                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold text-emerald-900 leading-tight">
+                        Gate Entry Slip Generated
+                      </p>
+                      <p className="text-[10px] text-emerald-700 font-mono">
+                        {approvedSlipEntry.slipNo} • {approvedSlipEntry.entryTime}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Approved
+                  </span>
+                </div>
+
+                {/* Thermal Slip Output matching Entry slip.jpeg */}
+                <div className="flex justify-center bg-slate-100/70 p-3 rounded-xl border border-slate-200">
+                  <EntrySlipDocument
+                    entry={approvedSlipEntry}
+                    companyName="Meghalai steels"
+                    id="printable-entry-slip"
+                  />
+                </div>
+
+                {/* Slip Actions: Print Button & Options */}
+                <div className="no-print space-y-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handlePrintSlip}
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition shadow-md hover:shadow-lg"
+                  >
+                    <Printer className="w-4 h-4" /> Print Entry Slip
+                  </button>
+
+                  <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+                    <span className="text-[11px] text-slate-400 font-mono">80mm Thermal Receipt</span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setActiveSlipEntry(approvedSlipEntry)}
+                        className="text-slate-600 hover:text-slate-900 hover:underline text-xs flex items-center gap-1"
+                      >
+                        Enlarge
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setApprovedSlipEntry(null)}
+                        className="text-slate-400 hover:text-slate-600 text-xs"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-5 pt-4 border-t border-slate-100 text-center py-5 px-3 bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
+                <Printer className="w-6 h-6 mx-auto mb-1.5 text-slate-400" />
+                <p className="text-xs font-bold text-slate-700">Physical Entry Slip Output</p>
+                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                  Once vehicle entry is approved, the official thermal slip with QR code will appear here for instant printing.
+                </p>
+                {entries.find(e => e.approvalStatus === 'Approved') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const latest = entries.find(e => e.approvalStatus === 'Approved');
+                      if (latest) setApprovedSlipEntry(latest);
+                    }}
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-semibold bg-emerald-50 border border-emerald-200 hover:bg-emerald-100/70 px-3 py-1.5 rounded-lg transition"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Display Latest Slip ({entries.find(e => e.approvalStatus === 'Approved')?.slipNo})
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -504,11 +646,11 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
                     <span className="text-slate-500">
                       Credit Limit:{' '}
                       <strong className="text-slate-700">
-                        RM {selectedCustomerObj.creditLimit.toLocaleString()}
+                        ₹ {selectedCustomerObj.creditLimit.toLocaleString('en-IN')}
                       </strong>
                     </span>
                     <span className="text-emerald-700 font-medium">
-                      Permissible Advance: RM 15,000
+                      Permissible Advance: ₹ 15,000
                     </span>
                   </div>
                 )}
@@ -801,9 +943,26 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
                     </td>
                     <td className="py-3 px-4 text-center">
                       {entry.approvalStatus === 'Approved' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
-                          <CheckCircle className="w-3 h-3" /> Approved
-                        </span>
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                            <CheckCircle className="w-3 h-3" /> Approved
+                          </span>
+                          <span
+                            className={cn(
+                              'text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider',
+                              entry.vehicleStatus === 'planned'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-amber-100 text-amber-800 border border-amber-300'
+                            )}
+                          >
+                            {entry.vehicleStatus || 'unplanned'}
+                          </span>
+                          {entry.currentLocation && (
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              {entry.currentLocation}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <div>
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-800">
@@ -825,9 +984,12 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
                         {entry.approvalStatus === 'Approved' && (
                           <>
                             <button
-                              onClick={() => setActiveSlipEntry(entry)}
-                              title="Print / View Entry Slip"
-                              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+                              onClick={() => {
+                                setApprovedSlipEntry(entry);
+                                slipContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              }}
+                              title="Display & Print Entry Slip"
+                              className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
                             >
                               <Printer className="w-4 h-4" />
                             </button>

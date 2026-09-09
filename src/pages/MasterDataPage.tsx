@@ -100,7 +100,7 @@ export function ProductsPage({ products, onUpdate }: ProductsPageProps) {
                 <th className="px-4 py-3 font-semibold text-slate-600">Name</th>
                 <th className="px-4 py-3 font-semibold text-slate-600">Category</th>
                 <th className="px-4 py-3 font-semibold text-slate-600">Unit</th>
-                <th className="px-4 py-3 font-semibold text-slate-600 text-right">Price (RM)</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 text-right">Price (₹)</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 text-center">Status</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 text-center">Actions</th>
               </tr>
@@ -189,7 +189,7 @@ function ProductForm({ item, onSave, onClose }: { item: Product | null; onSave: 
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Unit Price (RM)</label>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Unit Price (₹)</label>
             <input type="number" step="0.01" value={form.unitPrice} onChange={e => setForm({ ...form, unitPrice: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border rounded-lg text-sm" />
           </div>
         </div>
@@ -240,7 +240,7 @@ export function CustomersPage({ customers, onUpdate }: CustomersPageProps) {
             <th className="px-4 py-3 font-semibold text-slate-600">Name</th>
             <th className="px-4 py-3 font-semibold text-slate-600">Phone</th>
             <th className="px-4 py-3 font-semibold text-slate-600">Address</th>
-            <th className="px-4 py-3 font-semibold text-slate-600 text-right">Credit Limit</th>
+            <th className="px-4 py-3 font-semibold text-slate-600 text-right">Credit Limit (₹)</th>
             <th className="px-4 py-3 font-semibold text-slate-600 text-center">Status</th>
             <th className="px-4 py-3 font-semibold text-slate-600 text-center">Actions</th>
           </tr></thead>
@@ -251,7 +251,7 @@ export function CustomersPage({ customers, onUpdate }: CustomersPageProps) {
                 <td className="px-4 py-3 font-medium">{c.name}</td>
                 <td className="px-4 py-3 text-slate-500">{c.phone}</td>
                 <td className="px-4 py-3 text-slate-500 text-xs max-w-[200px] truncate">{c.address}</td>
-                <td className="px-4 py-3 text-right font-mono">RM {c.creditLimit.toLocaleString()}</td>
+                <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">₹ {c.creditLimit.toLocaleString('en-IN')}</td>
                 <td className="px-4 py-3 text-center">
                   <button onClick={() => onUpdate(customers.map(x => x.id === c.id ? {...x, isActive: !x.isActive} : x))}>
                     {c.isActive ? <ToggleRight className="w-6 h-6 text-emerald-500 mx-auto" /> : <ToggleLeft className="w-6 h-6 text-slate-300 mx-auto" />}
@@ -282,7 +282,7 @@ function CustomerForm({ item, onSave, onClose }: { item: Customer | null; onSave
           <div><label className="block text-xs font-medium text-slate-600 mb-1">Name</label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
           <div><label className="block text-xs font-medium text-slate-600 mb-1">Phone</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
           <div><label className="block text-xs font-medium text-slate-600 mb-1">Address</label><textarea value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm" rows={2} /></div>
-          <div><label className="block text-xs font-medium text-slate-600 mb-1">Credit Limit (RM)</label><input type="number" value={form.creditLimit} onChange={e => setForm({...form, creditLimit: parseFloat(e.target.value)||0})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
+          <div><label className="block text-xs font-medium text-slate-600 mb-1">Credit Limit (₹)</label><input type="number" value={form.creditLimit} onChange={e => setForm({...form, creditLimit: parseFloat(e.target.value)||0})} className="w-full px-3 py-2 border rounded-lg text-sm" /></div>
         </div>
         <div className="flex gap-3 mt-6">
           <button onClick={() => onSave(form)} className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button>

@@ -28,7 +28,8 @@ import { cn } from '@/utils/cn';
 import {
   ClipboardList, Clock, Truck, Plus, Trash2,
   FileCheck2, ArrowRight, Printer, AlertTriangle, ShieldCheck,
-  CheckCircle2
+  CheckCircle2, Search, Check, FileText, Phone, Scale,
+  Calendar, Layers, MapPin, ChevronDown, Building2, Eye
 } from 'lucide-react';
 
 interface PlanningPageProps {
@@ -65,24 +66,59 @@ export const PlanningPage: React.FC<PlanningPageProps> = ({
   const supervisors = employees.filter(e => e.role === 'supervisor');
   const handlers = employees.filter(e => e.role === 'handler');
 
-  // Approved vehicles that don't have a delivery order yet
+  // Approved vehicles that don't have a delivery order yet (Status: Unplanned)
   const plannedVehicleEntryIds = new Set(deliveryOrders.map(d => d.vehicleEntryId));
   const queueVehicles = entries.filter(
     e => e.approvalStatus === 'Approved' && !plannedVehicleEntryIds.has(e.id)
   );
+  const allApprovedVehicles = entries.filter(e => e.approvalStatus === 'Approved');
 
   // Currently selected vehicle for planning
   const [selectedEntryId, setSelectedEntryId] = useState<number | null>(
     selectedVehicleEntryId || queueVehicles[0]?.id || null
   );
 
+  // Search filter and view mode
+  const [vehicleSearch, setVehicleSearch] = useState('');
+  const [viewTab, setViewTab] = useState<'unplanned' | 'all'>('unplanned');
+
   useEffect(() => {
     if (selectedVehicleEntryId) {
       setSelectedEntryId(selectedVehicleEntryId);
+    } else if (selectedEntryId && !queueVehicles.some(v => v.id === selectedEntryId)) {
+      setSelectedEntryId(queueVehicles[0]?.id || null);
+    } else if (!selectedEntryId && queueVehicles.length > 0) {
+      setSelectedEntryId(queueVehicles[0].id);
     }
-  }, [selectedVehicleEntryId]);
+  }, [selectedVehicleEntryId, queueVehicles, selectedEntryId]);
 
   const currentVehicle = entries.find(e => e.id === selectedEntryId);
+
+  // Filtered queue of unplanned vehicles
+  const filteredQueueVehicles = queueVehicles.filter(v => {
+    if (!vehicleSearch.trim()) return true;
+    const q = vehicleSearch.toLowerCase();
+    return (
+      v.vehicleNumber.toLowerCase().includes(q) ||
+      v.slipNo.toLowerCase().includes(q) ||
+      v.customerName.toLowerCase().includes(q) ||
+      v.material.toLowerCase().includes(q) ||
+      v.driverName.toLowerCase().includes(q)
+    );
+  });
+
+  // Filtered list of all approved vehicles
+  const filteredAllVehicles = allApprovedVehicles.filter(v => {
+    if (!vehicleSearch.trim()) return true;
+    const q = vehicleSearch.toLowerCase();
+    return (
+      v.vehicleNumber.toLowerCase().includes(q) ||
+      v.slipNo.toLowerCase().includes(q) ||
+      v.customerName.toLowerCase().includes(q) ||
+      v.material.toLowerCase().includes(q) ||
+      v.driverName.toLowerCase().includes(q)
+    );
+  });
 
   // ── Planning Timer ─────────────────────────────────────────────────────
   // Automatically tracks elapsed planning time from vehicle selection until DO generation
@@ -223,9 +259,12 @@ export const PlanningPage: React.FC<PlanningPageProps> = ({
       plannerName,
       plannerId: planners.find(p => p.name === plannerName)?.id,
       supervisorName,
+      supervisorId: supervisors.find(s => s.name === supervisorName)?.id,
       baysCount: bays.length,
       items: plannedItems,
       totalPlannedWeightKg: totalPlannedWeight,
+      currentLocation: `Waiting for ${bays[0]?.bayName || 'Bay 1'} / Scale #1`,
+      checkingStatus: 'pending',
       inTime: currentVehicle.entryTime,
       planningStartTime,
       planningEndTime: endTime,
@@ -282,49 +321,264 @@ export const PlanningPage: React.FC<PlanningPageProps> = ({
         )}
       </div>
 
-      {/* ── Vehicle Selection Queue ─────────────────────────────────── */}
-      <div className="bg-white rounded-xl shadow border border-slate-200 p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
-            <Truck className="w-4 h-4 text-blue-500" />
-            Vehicles Awaiting Planning ({queueVehicles.length})
-          </h3>
-          <span className="text-xs text-slate-400">Click a vehicle to begin planning</span>
+      {/* ── Vehicle Selection Queue & Dropdown ───────────────────────── */}
+      <div className="bg-white rounded-xl shadow border border-slate-200 p-5 space-y-4">
+        {/* Header & Badges */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="font-black text-base text-slate-800 flex items-center gap-2">
+              <Truck className="w-5 h-5 text-blue-600" />
+              Vehicle Planning Queue — Select Vehicle for Planning
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Select a vehicle from the list of vehicle numbers. All vehicles awaiting planning show as <strong className="text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded font-bold">Unplanned</strong> until picked up and a Delivery Order is generated.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+              {queueVehicles.length} Unplanned Vehicles Awaiting DO
+            </span>
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200">
+              {deliveryOrders.length} Planned DOs Issued
+            </span>
+          </div>
         </div>
 
-        {queueVehicles.length === 0 ? (
-          <div className="py-6 text-center text-slate-400 text-xs border border-dashed rounded-lg">
-            No approved vehicles in the queue. New arrivals at the Entry Gate will appear here automatically.
+        {/* Prominent Vehicle Number Selector & Search Bar */}
+        <div className="p-4 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 rounded-xl border border-blue-200/80 flex flex-col md:flex-row md:items-center gap-4 justify-between">
+          {/* Main Dropdown */}
+          <div className="flex-1">
+            <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              <Truck className="w-4 h-4 text-blue-600" />
+              Select Vehicle Number for Planning Activity:
+            </label>
+            <div className="relative">
+              <select
+                value={selectedEntryId || ''}
+                onChange={e => setSelectedEntryId(Number(e.target.value))}
+                className="w-full pl-3 pr-10 py-2.5 bg-white border-2 border-blue-500 rounded-lg text-sm font-black font-mono text-slate-900 focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm cursor-pointer"
+              >
+                {queueVehicles.length === 0 ? (
+                  <option value="">No unplanned vehicles in queue</option>
+                ) : (
+                  <>
+                    <option value="" disabled>-- Select a Vehicle Number from List --</option>
+                    {queueVehicles.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {v.vehicleNumber}  |  Slip: {v.slipNo}  |  {v.customerName}  ({v.material})  [STATUS: UNPLANNED]
+                      </option>
+                    ))}
+                  </>
+                )}
+              </select>
+              <ChevronDown className="w-4 h-4 text-blue-600 absolute right-3 top-3 pointer-events-none" />
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {queueVehicles.map(v => {
-              const isSelected = v.id === selectedEntryId;
-              return (
-                <button
-                  key={v.id}
-                  onClick={() => setSelectedEntryId(v.id)}
-                  className={cn(
-                    'p-3.5 rounded-xl border text-left transition-all relative overflow-hidden',
-                    isSelected
-                      ? 'border-blue-500 bg-blue-50/70 shadow-md ring-2 ring-blue-400/20'
-                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                  )}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-mono text-xs font-bold text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded">
-                      {v.slipNo}
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-mono">{v.entryTime}</span>
-                  </div>
-                  <p className="font-black text-sm text-slate-900 tracking-tight uppercase">
-                    {v.vehicleNumber}
-                  </p>
-                  <p className="text-xs text-slate-600 truncate mt-0.5">{v.customerName}</p>
-                  <p className="text-[11px] text-slate-400 truncate">{v.material}</p>
-                </button>
-              );
-            })}
+
+          {/* Quick Search Filter */}
+          <div className="w-full md:w-80">
+            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5 text-slate-500" />
+              Search Vehicle / Slip / Customer:
+            </label>
+            <input
+              type="text"
+              value={vehicleSearch}
+              onChange={e => setVehicleSearch(e.target.value)}
+              placeholder="e.g. TN09, Meghalai, Rubber, Sand..."
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm"
+            />
+          </div>
+        </div>
+
+        {/* View Tabs: Unplanned Queue vs All Vehicles Status Overview */}
+        <div className="flex items-center justify-between pt-1 border-b border-slate-200">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setViewTab('unplanned')}
+              className={cn(
+                'px-4 py-2 text-xs font-bold border-b-2 transition-colors flex items-center gap-2',
+                viewTab === 'unplanned'
+                  ? 'border-blue-600 text-blue-700 bg-blue-50/50 rounded-t-lg'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              )}
+            >
+              <Truck className="w-3.5 h-3.5" />
+              Unplanned Queue ({queueVehicles.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewTab('all')}
+              className={cn(
+                'px-4 py-2 text-xs font-bold border-b-2 transition-colors flex items-center gap-2',
+                viewTab === 'all'
+                  ? 'border-blue-600 text-blue-700 bg-blue-50/50 rounded-t-lg'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              )}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              All Gate Vehicles Status Overview ({allApprovedVehicles.length})
+            </button>
+          </div>
+
+          <span className="text-[11px] text-slate-400 hidden sm:inline">
+            {viewTab === 'unplanned' ? 'Click any card below to load details' : 'Complete status register'}
+          </span>
+        </div>
+
+        {/* Tab 1: Unplanned Queue Cards */}
+        {viewTab === 'unplanned' && (
+          <div>
+            {filteredQueueVehicles.length === 0 ? (
+              <div className="py-8 text-center text-slate-400 text-xs border border-dashed rounded-xl bg-slate-50">
+                {queueVehicles.length === 0
+                  ? 'All approved gate vehicles have been planned! New arrivals at the Entry Gate will appear here automatically.'
+                  : 'No unplanned vehicles match your search filter.'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {filteredQueueVehicles.map(v => {
+                  const isSelected = v.id === selectedEntryId;
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setSelectedEntryId(v.id)}
+                      className={cn(
+                        'p-4 rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between group',
+                        isSelected
+                          ? 'border-blue-500 bg-blue-50/80 shadow-md ring-2 ring-blue-400/30'
+                          : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50/80 bg-white shadow-sm'
+                      )}
+                    >
+                      <div>
+                        {/* Top row: Slip No, Status Pill, Entry Time */}
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <span className="font-mono text-xs font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded">
+                            {v.slipNo}
+                          </span>
+                          <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 tracking-wider">
+                            Unplanned
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono">{v.entryTime}</span>
+                        </div>
+
+                        {/* Vehicle Number */}
+                        <p className="font-black text-base text-slate-900 font-mono tracking-tight uppercase group-hover:text-blue-700 transition-colors">
+                          {v.vehicleNumber}
+                        </p>
+
+                        {/* Customer & Cargo */}
+                        <p className="text-xs font-medium text-slate-700 truncate mt-0.5">{v.customerName}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{v.material} ({v.vehicleType})</p>
+                      </div>
+
+                      {/* Bottom row: Tare weight & Selection indicator */}
+                      <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                        <span className="font-mono text-[11px] text-slate-600">
+                          Tare: <strong>{v.entryWeight.toLocaleString()} kg</strong>
+                        </span>
+                        {isSelected ? (
+                          <span className="text-[11px] font-bold text-blue-700 flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" /> Selected for Planning
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 group-hover:text-blue-600 font-semibold transition-colors flex items-center gap-0.5">
+                            Pick to Plan →
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 2: All Gate Vehicles Status Overview */}
+        {viewTab === 'all' && (
+          <div className="overflow-x-auto border rounded-xl">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                <tr>
+                  <th className="py-2.5 px-3">Vehicle Number</th>
+                  <th className="py-2.5 px-3">Slip No</th>
+                  <th className="py-2.5 px-3">Vehicle Type</th>
+                  <th className="py-2.5 px-3">Customer</th>
+                  <th className="py-2.5 px-3">Material</th>
+                  <th className="py-2.5 px-3">Gate In-Time</th>
+                  <th className="py-2.5 px-3 text-right">Tare Weight</th>
+                  <th className="py-2.5 px-3 text-center">Planning Status</th>
+                  <th className="py-2.5 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredAllVehicles.map(v => {
+                  const doRecord = deliveryOrders.find(d => d.vehicleEntryId === v.id);
+                  const isPlanned = !!doRecord;
+                  const isSelected = v.id === selectedEntryId;
+
+                  return (
+                    <tr
+                      key={v.id}
+                      className={cn(
+                        'hover:bg-slate-50/80 transition-colors',
+                        isSelected && 'bg-blue-50/60'
+                      )}
+                    >
+                      <td className="py-2.5 px-3 font-mono font-black uppercase text-slate-900">
+                        {v.vehicleNumber}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-blue-700">{v.slipNo}</td>
+                      <td className="py-2.5 px-3 text-slate-600">{v.vehicleType}</td>
+                      <td className="py-2.5 px-3 font-medium text-slate-800">{v.customerName}</td>
+                      <td className="py-2.5 px-3 text-slate-600">{v.material}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-600">{v.entryTime}</td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-slate-900 text-right">
+                        {v.entryWeight.toLocaleString()} kg
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        {isPlanned ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                            <CheckCircle2 className="w-3 h-3" /> Planned ({doRecord.doNumber})
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-300">
+                            Unplanned
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        {!isPlanned ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedEntryId(v.id);
+                              setViewTab('unplanned');
+                            }}
+                            className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold transition shadow-sm"
+                          >
+                            Plan Vehicle
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setActiveDOModal(doRecord)}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-medium transition"
+                          >
+                            View DO
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -332,30 +586,111 @@ export const PlanningPage: React.FC<PlanningPageProps> = ({
       {/* ── Active Planning Phase Form ──────────────────────────────── */}
       {currentVehicle ? (
         <div className="bg-white rounded-xl shadow border border-slate-200 p-6 space-y-6">
-          {/* Header Summary for Current Vehicle */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b gap-3">
-            <div>
-              <span className="text-xs text-blue-600 font-bold uppercase tracking-wider">
-                Active Planning Task
-              </span>
-              <h3 className="text-lg font-black text-slate-900 uppercase">
-                {currentVehicle.vehicleNumber} — {currentVehicle.customerName}
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Driver: {currentVehicle.driverName} ({currentVehicle.mobileNumber}) | Cargo: {currentVehicle.material}
-              </p>
+          {/* ── Details Captured at Entry Point Card ──────────────────── */}
+          <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white overflow-hidden shadow-sm">
+            {/* Top Banner */}
+            <div className="p-4 bg-slate-100/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] uppercase font-mono font-black tracking-wider px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                    Captured at Entry Point
+                  </span>
+                  <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                    Status: Unplanned (Will become Planned upon DO generation)
+                  </span>
+                </div>
+                <h3 className="text-lg font-black text-slate-900 uppercase font-mono flex items-center gap-2">
+                  <Truck className="w-5 h-5 text-blue-600" />
+                  {currentVehicle.vehicleNumber}
+                  <span className="text-sm font-medium font-sans text-slate-500 normal-case">
+                    — {currentVehicle.customerName}
+                  </span>
+                </h3>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white border border-slate-200 rounded-lg text-xs font-mono shadow-xs">
+                  <span className="text-slate-400 block text-[10px] uppercase">Gate Slip No</span>
+                  <span className="font-bold text-blue-700">{currentVehicle.slipNo}</span>
+                </div>
+                <div className="p-2 bg-white border border-slate-200 rounded-lg text-xs font-mono shadow-xs">
+                  <span className="text-slate-400 block text-[10px] uppercase">Gate In-Time</span>
+                  <span className="font-bold text-slate-800">{currentVehicle.entryTime}</span>
+                </div>
+                <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs font-mono shadow-xs">
+                  <span className="text-blue-600 block text-[10px] uppercase">Planning Started</span>
+                  <span className="font-bold text-blue-900">{planningStartTime}</span>
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-slate-100 rounded-lg text-xs font-mono">
-                <span className="text-slate-400 block text-[10px]">IN TIME (GATE)</span>
-                <span className="font-bold text-slate-800">{currentVehicle.entryTime}</span>
+            {/* Structured Details Grid */}
+            <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 bg-white rounded-lg border border-slate-200">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Vehicle Plate & Type</span>
+                <p className="font-black text-sm text-slate-900 font-mono mt-0.5">{currentVehicle.vehicleNumber}</p>
+                <p className="text-[11px] text-slate-500">{currentVehicle.vehicleType}</p>
               </div>
-              <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs font-mono">
-                <span className="text-blue-600 block text-[10px]">PLANNING STARTED</span>
-                <span className="font-bold text-blue-900">{planningStartTime}</span>
+
+              <div className="p-3 bg-white rounded-lg border border-slate-200">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Driver Information</span>
+                <p className="font-bold text-sm text-slate-900 mt-0.5">{currentVehicle.driverName}</p>
+                <p className="text-[11px] text-slate-500 font-mono">Ph: {currentVehicle.mobileNumber}</p>
+              </div>
+
+              <div className="p-3 bg-white rounded-lg border border-slate-200">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Material / Cargo</span>
+                <p className="font-bold text-sm text-slate-900 mt-0.5">{currentVehicle.material}</p>
+                <p className="text-[11px] text-slate-500">Operation: Inward Cargo</p>
+              </div>
+
+              <div className="p-3 bg-white rounded-lg border border-slate-200">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">First Weight (Tare)</span>
+                <p className="font-black text-sm text-slate-900 font-mono mt-0.5">
+                  {currentVehicle.entryWeight.toLocaleString()} <span className="text-xs font-normal">kg</span>
+                </p>
+                <p className="text-[11px] text-slate-500 font-mono">Seq #{currentVehicle.firstWgtSeqNo || '911'}</p>
+              </div>
+
+              <div className="p-3 bg-white rounded-lg border border-slate-200">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Customer / Consignee</span>
+                <p className="font-bold text-sm text-slate-900 mt-0.5 truncate">{currentVehicle.customerName}</p>
+                <p className="text-[11px] text-emerald-600 font-semibold">Gate Status: Approved</p>
+              </div>
+
+              <div className="p-3 bg-white rounded-lg border border-slate-200">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Gate Operator & Date</span>
+                <p className="font-bold text-sm text-slate-900 mt-0.5">{currentVehicle.operatorName}</p>
+                <p className="text-[11px] text-slate-500 font-mono">{currentVehicle.entryDate}</p>
+              </div>
+
+              <div className="p-3 bg-white rounded-lg border border-slate-200">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Financial Clearance</span>
+                <p className="font-bold text-sm text-slate-900 mt-0.5 font-mono">
+                  Adv: ₹{(currentVehicle.advanceBalance || 0).toLocaleString()}
+                </p>
+                <p className="text-[11px] text-slate-500 font-mono">
+                  Limit: ₹{(currentVehicle.creditLimit || 0).toLocaleString()}
+                </p>
+              </div>
+
+              <div className="p-3 bg-white rounded-lg border border-slate-200">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Current Location</span>
+                <p className="font-bold text-sm text-blue-700 mt-0.5">{currentVehicle.currentLocation}</p>
+                <p className="text-[11px] text-amber-700 font-semibold">Ready for Bay Allocation</p>
               </div>
             </div>
+
+            {/* Gate Notes Callout */}
+            {currentVehicle.notes && (
+              <div className="mx-4 mb-4 p-2.5 bg-blue-50/50 border border-blue-200/60 rounded-lg text-xs flex items-start gap-2 text-slate-700">
+                <FileText className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-slate-800">Gate Inspection Notes: </span>
+                  {currentVehicle.notes}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Role Chain: Planner -> Supervisor -> Handlers */}

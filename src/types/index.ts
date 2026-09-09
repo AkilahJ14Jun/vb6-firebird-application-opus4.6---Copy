@@ -218,6 +218,20 @@ export interface Payment {
  * Replaces: frmSettings
  * Original VB6 stored these in SETTINGS table and modGlobal variables
  */
+export interface IpCameraConfig {
+  id: string;
+  name: string; // e.g., "Weighbridge #1 Inbound Plate Camera"
+  ipAddress: string; // e.g., "192.168.1.121"
+  port: number; // e.g., 554 or 8080
+  rtspUrl?: string; // e.g., "rtsp://admin:pass@192.168.1.121:554/ch0"
+  httpSnapshotUrl?: string; // e.g., "http://192.168.1.121:80/snapshot.jpg"
+  location: string; // e.g., "Entrance Weighbridge (Scale #1)"
+  channel: number;
+  status: 'online' | 'offline' | 'testing';
+  captureTrigger: 'manual' | 'scale_stabilized' | 'entry_slip';
+  isEnabled: boolean;
+}
+
 export interface AppSettings {
   companyName: string;
   companyAddress: string;
@@ -238,6 +252,8 @@ export interface AppSettings {
   weightDecimals: number;
   /** Whether the Unloading module/option is enabled (configured by Admin) */
   enableUnloading: boolean;
+  /** Configured IP-based cameras for weighbridge data and plate capturing */
+  ipCameras?: IpCameraConfig[];
 }
 
 /* ── Audit Log ─────────────────────────────────────────────────────────────
@@ -278,6 +294,7 @@ export interface DailySummary {
  * Customer Name, Material, Approval status, Reject reason, 1st Wgt S.No, Entry Weight.
  */
 export type ApprovalStatus = 'Approved' | 'Rejected' | 'Pending';
+export type VehicleLifecycleStatus = 'unplanned' | 'planned' | 'in_progress' | 'awaiting_check' | 'Checked' | 'discrepancy' | 'billing' | 'billed' | 'completed' | 'exited';
 
 export interface VehicleEntry {
   id: number;
@@ -294,6 +311,9 @@ export interface VehicleEntry {
   firstWgtSeqNo: string; // e.g. "908" (from Entry slip sample)
   entryWeight: number; // e.g. 2690 kg
   approvalStatus: ApprovalStatus;
+  /** Status before D.O generation is 'unplanned', then 'planned' once D.O is generated */
+  vehicleStatus?: 'unplanned' | 'planned' | 'in_progress' | 'checked' | 'billed' | 'exited';
+  currentLocation?: string;
   rejectReason?: string | null;
   operatorId: number;
   operatorName: string;
@@ -310,7 +330,7 @@ export interface VehicleEntry {
 export interface WarehouseEmployee {
   id: number;
   name: string;
-  role: 'supervisor' | 'handler' | 'operator' | 'planner';
+  role: 'supervisor' | 'handler' | 'operator' | 'planner' | 'checker';
   phone: string;
   isActive: boolean;
 }
@@ -324,6 +344,8 @@ export interface PlannedBayItem {
   itemCode: string;
   itemName: string;
   plannedWeightKg: number;
+  actualLoadedWeightKg?: number;
+  pendingWeightKg?: number;
   notes?: string;
 }
 
@@ -346,6 +368,16 @@ export interface DeliveryOrderPlan {
   items: PlannedBayItem[];
   totalPlannedWeightKg: number;
   
+  // Real-time tracking of vehicle location and checking
+  currentLocation: string; // e.g. "Entry Gate", "Waiting for Bay 1", "At Bay 1 (North Bulk Hopper)", "At Checking Area", "Billing Section", "Exit Gate", "Exited Warehouse"
+  checkingStatus?: 'pending' | 'checked' | 'discrepancy';
+  checkerName?: string;
+  checkedAt?: string;
+  discrepancyNotes?: string;
+  discrepancyTargetBays?: number[];
+  billingSettled?: boolean;
+  exitedAt?: string;
+
   // Timestamps & durations (12-hour format with seconds)
   inTime: string; // Entry gate time, e.g. "08:29:20 AM"
   planningStartTime: string;
@@ -353,7 +385,7 @@ export interface DeliveryOrderPlan {
   planningDurationSeconds: number; // planning time
   outTime: string; // From entry till planning done
   
-  status: 'planned' | 'in_progress' | 'completed' | 'billed';
+  status: 'planned' | 'in_progress' | 'awaiting_check' | 'Checked' | 'discrepancy' | 'billing' | 'billed' | 'completed' | 'exited';
   createdAt: string;
 }
 
@@ -379,6 +411,8 @@ export interface BayLoadingRecord {
   loadingDurationSeconds: number;
   deviationStatus: 'normal' | 'minor' | 'major';
   activityType?: 'loading' | 'unloading';
+  hasDiscrepancy?: boolean;
+  discrepancyNote?: string;
 }
 
 export interface WeighmentRecord {
@@ -408,6 +442,14 @@ export interface MultiWeighmentSession {
   supervisorName: string;
   operationMode?: 'loading' | 'unloading';
   
+  // Real-time location within warehouse
+  currentLocation: string; // e.g. "At Bay 1 (North Bulk Hopper)", "At Checking Station", "Guided back to Bay 2 (Discrepancy)", "At Billing Counter", "At Exit Gate", "Exited Warehouse"
+  checkingStatus?: 'pending' | 'checked' | 'discrepancy';
+  checkerName?: string;
+  checkedAt?: string;
+  discrepancyNotes?: string;
+  discrepancyTargetBays?: number[];
+
   // Weights breakdown
   tareWeightKg: number; // 1st weighment (empty vehicle or final tare)
   finalGrossWeightKg: number;
@@ -440,7 +482,7 @@ export interface MultiWeighmentSession {
   exitTime?: string; // Final gate exit timestamp
   totalTurnaroundSeconds?: number; // Complete time from inTime to exitTime
   
-  status: 'tare_captured' | 'loading' | 'verification' | 'completed' | 'billed';
+  status: 'tare_captured' | 'loading' | 'verification' | 'awaiting_check' | 'Checked' | 'discrepancy' | 'billing' | 'billed' | 'completed' | 'exited';
   createdAt: string;
 }
 

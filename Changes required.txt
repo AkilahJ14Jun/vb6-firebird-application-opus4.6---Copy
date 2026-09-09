@@ -2,17 +2,16 @@ Understand the application and this code base by going through the content in 'g
 
 Following changes are required in this application.
 
-A system admin role user to be created to be avaliable for the purpose of providing support. This will be highest level of control on the application.
-Normally a person with planner role will be the one who assigns the vehicle to a supervisor.
-This supervisor will be responsible for ensuring that required items in required weight are being loaded from specific bays.
-Each bay will have a handler incharge of hadling the loading and unloading activity.
-Rename the 'Weigh In' option as 'Loading' and 'Weigh Out' as 'Unloading'
-Before each loading activity , the previous weight , the weight added  in each bay and the gross weight should be displayed on the screen.
-Similarly for each unloading activity also the previous weight, the weight offloaded in each bay and the gross weight after unloading should be displayed on the screen.
-The 'Admin' user should be able configure whether 'Unloading' option is required to be available or not.
-Another interface for managing roles to be available. The roles in the user management page should be populated from this roles master table.
-The reports should allow taking reports of time taken taken between each stage , from one stage to another, from entry time to exit time and warehouse time.
-The currency utilized should be in Indian Rupees
+
+Once an entry slip is generated on vehicle entry, it is then used for planning the entire series of loading or unloading tasks. 
+The things that get confirmed during this planning stage are the number of items and the respective weight required to be loaded or unloaded and the bay from which each item has to be loaded from or unloaded to. 
+The supervisor who will be assigned for that vehicle from the time it entered the warehouse till all the items are loaded or unloaded. 
+Once this is done the status for that vehicle is marked as planned and a Delivery Order (D.O) number is generated.
+At each stage the user of the application should be able to select the D.O for the vehicle from an existing list of DOs which is not yet complete.
+Before the D.O generation the status is marked as unplanned. At any stage an user should be able to see how much of loading/unloading activity is pending and currently for a given delivery order number. The user should also be able to know where a particular vehicle is located at any point in time within the warehouse. Each bay will have a handler person associated.Once all the items from relevant bays are loaded, then another person does the checking. Once checked and verified that all items and required weight is loaded , the status is marked as 'Checked'. After that the vehicle goes to the billing section within the warehouse. Once the bill amount is settled or payment made according the payment and agreed credit limit terms, then the vehicle is let to exit from the warehouse. While checking if there is any discrepancy then person checking will guide the vehicle to the particular bay/bays where it has to go to again for required loading/unloading activity, as directed by the checking person. Change the customer, supplier,driver, user names to appear like Indian names and customer credit limit in 'Customers' page to show in Indian Rupees. The settings page should allow the user to configure IP based cameras also for the weigh bridge data capturing activity.
+The 'Dashboard' page which displays the Open tickets currently should display only the items awaiting to be loaded. 
+
+
 
 
 

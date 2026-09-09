@@ -17,10 +17,11 @@
  * ============================================================================
  */
 
-import type { Ticket, DailySummary, User } from '@/types';
+import type { Ticket, DailySummary, User, DeliveryOrderPlan } from '@/types';
 import {
   Scale, Ticket as TicketIcon,
-  TrendingUp, Users2, Clock, LogIn, ClipboardList, Layers
+  TrendingUp, Users2, Clock, LogIn, ClipboardList, Layers,
+  PackageOpen, MapPin, UserCheck, ArrowRight
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
@@ -30,9 +31,10 @@ interface DashboardPageProps {
   user: User;
   onNavigate: (page: string) => void;
   enableUnloading?: boolean;
+  deliveryOrders?: DeliveryOrderPlan[];
 }
 
-export function DashboardPage({ tickets, summary, user, onNavigate, enableUnloading = true }: DashboardPageProps) {
+export function DashboardPage({ tickets, summary, user, onNavigate, enableUnloading = true, deliveryOrders = [] }: DashboardPageProps) {
   const today = new Date().toISOString().split('T')[0];
   const todaySummary = summary.find((s) => s.date === today);
   const openTickets = tickets.filter((t) => t.status === 'open');
@@ -42,6 +44,39 @@ export function DashboardPage({ tickets, summary, user, onNavigate, enableUnload
 
   const totalRevenue = summary.reduce((sum, s) => sum + s.totalAmount, 0);
   const totalWeight = summary.reduce((sum, s) => sum + s.totalWeight, 0);
+
+  // Requirement 12: Extract items awaiting to be loaded from active delivery orders
+  const itemsAwaitingLoading = (deliveryOrders || [])
+    .filter(order => order.status !== 'completed' && order.status !== 'exited')
+    .flatMap(order => {
+      return (order.items || []).map((item, idx) => {
+        const targetWeight = Number(item.plannedWeightKg ?? (item as any).targetWeightKg ?? 0);
+        const actualWeight = Number(item.actualLoadedWeightKg ?? 0);
+        const pendingWeight = item.pendingWeightKg !== undefined
+          ? Number(item.pendingWeightKg)
+          : Math.max(0, targetWeight - actualWeight);
+
+        return {
+          orderId: order.id,
+          doNumber: order.doNumber,
+          vehicleNumber: order.vehicleNumber,
+          customerName: order.customerName,
+          driverName: order.driverName,
+          supervisorName: order.supervisorName,
+          currentLocation: order.currentLocation || 'In Yard / Bay Queue',
+          itemIndex: idx + 1,
+          productName: item.itemName || (item as any).productName || 'Product',
+          productCode: item.itemCode || (item as any).productCode || 'ITEM',
+          targetWeightKg: targetWeight,
+          actualLoadedWeightKg: actualWeight,
+          pendingWeightKg: pendingWeight,
+          allocatedBayNumber: item.bayNumber ?? (item as any).allocatedBayNumber ?? 1,
+          associatedHandlerPerson: item.handlerName || (item as any).associatedHandlerPerson || 'Bay Handler',
+          isFullyLoaded: pendingWeight <= 0,
+        };
+      });
+    })
+    .filter(item => !item.isFullyLoaded);
 
   return (
     <div className="space-y-6">
@@ -64,9 +99,9 @@ export function DashboardPage({ tickets, summary, user, onNavigate, enableUnload
             iconBg: 'bg-blue-100',
           },
           {
-            label: enableUnloading ? 'Open (Pending Unloading)' : 'Open (Pending Completion)',
-            value: openTickets.length,
-            icon: Clock,
+            label: "Items Awaiting Loading",
+            value: itemsAwaitingLoading.length,
+            icon: PackageOpen,
             color: 'bg-amber-50 text-amber-600 border-amber-200',
             iconBg: 'bg-amber-100',
           },
@@ -154,33 +189,68 @@ export function DashboardPage({ tickets, summary, user, onNavigate, enableUnload
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* ── Open Tickets (Pending Weigh-Out) ──────────────────────── */}
-        <div className="bg-white rounded-xl shadow border border-slate-200">
+        {/* ── Items Awaiting to be Loaded (Requirement 12) ──────────── */}
+        <div className="bg-white rounded-xl shadow border border-slate-200 flex flex-col">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <h3 className="font-bold text-slate-800 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-500" />
-              Open Tickets ({enableUnloading ? 'Awaiting Unloading' : 'Awaiting Completion'})
+              <PackageOpen className="w-4 h-4 text-amber-600" />
+              Items Awaiting Loading
             </h3>
-            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-              {openTickets.length}
+            <span className="text-xs bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-bold">
+              {itemsAwaitingLoading.length} item{itemsAwaitingLoading.length === 1 ? '' : 's'}
             </span>
           </div>
-          <div className="divide-y divide-slate-50">
-            {openTickets.length === 0 ? (
-              <p className="p-6 text-sm text-slate-400 text-center">No open tickets</p>
+          <div className="divide-y divide-slate-100 flex-1 overflow-y-auto max-h-[440px]">
+            {itemsAwaitingLoading.length === 0 ? (
+              <div className="p-8 text-center text-slate-400">
+                <PackageOpen className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-medium text-slate-600">All planned items are fully loaded</p>
+                <p className="text-xs text-slate-400 mt-0.5">No items currently waiting for bay loading activity.</p>
+              </div>
             ) : (
-              openTickets.map((t) => (
-                <div key={t.id} className="p-3 hover:bg-slate-50 flex items-center gap-3">
-                  <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                    <Scale className="w-5 h-5 text-amber-600" />
+              itemsAwaitingLoading.map((item, idx) => (
+                <div
+                  key={`${item.orderId}-${item.itemIndex}-${idx}`}
+                  className="p-3.5 hover:bg-slate-50 transition-colors flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="w-9 h-9 bg-amber-50 rounded-lg flex items-center justify-center shrink-0 border border-amber-200">
+                      <span className="font-bold text-amber-700 text-xs">B{item.allocatedBayNumber}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-bold text-slate-800 truncate">{item.productName}</p>
+                        <span className="text-[10px] bg-slate-100 text-slate-600 font-mono px-1.5 py-0.5 rounded">
+                          {item.productCode}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        <span className="font-mono font-semibold text-slate-700">{item.vehicleNumber}</span> · DO: <span className="font-mono text-slate-700">{item.doNumber}</span> · {item.customerName}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
+                        <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-medium">
+                          <UserCheck className="w-3 h-3" /> Handler: {item.associatedHandlerPerson}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-slate-500">
+                          <MapPin className="w-3 h-3 text-emerald-600" /> {item.currentLocation}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800">{t.ticketNo}</p>
-                    <p className="text-xs text-slate-500">{t.vehiclePlateNo} · {t.productName}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-slate-700">{t.grossWeight?.toLocaleString()} kg</p>
-                    <p className="text-[10px] text-slate-400">{t.weighInAt?.split(' ')[1]}</p>
+
+                  <div className="text-right shrink-0 flex flex-col items-end">
+                    <p className="text-sm font-bold font-mono text-amber-700">
+                      {(item.pendingWeightKg || 0).toLocaleString()} kg
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      Target: {(item.targetWeightKg || 0).toLocaleString()} kg
+                    </p>
+                    <button
+                      onClick={() => onNavigate('multi-weighment')}
+                      className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                    >
+                      Load at Bay <ArrowRight className="w-3 h-3" />
+                    </button>
                   </div>
                 </div>
               ))
