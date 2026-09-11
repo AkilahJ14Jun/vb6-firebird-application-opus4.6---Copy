@@ -25,7 +25,7 @@ import type {
   User, Product, Customer, Supplier, Vehicle,
   Ticket, Transaction, AppSettings, AuditLog, DailySummary,
   VehicleEntry, WarehouseEmployee, DeliveryOrderPlan,
-  MultiWeighmentSession, RoleMaster,
+  MultiWeighmentSession, RoleMaster, BayMaster,
 } from '../types';
 
 // ── Helper: generate sequential IDs ───────────────────────────────────────
@@ -233,14 +233,14 @@ export const sampleSuppliers: Supplier[] = [
   { id: 5, code: 'S005', name: 'Malabar Timber Depot', phone: '0491-255 5555', address: 'Industrial Area, Palakkad, Kerala', isActive: true },
 ];
 
-/** Sample vehicles (replaces VEHICLES table) with Indian driver names */
+/** Sample vehicles (replaces VEHICLES table) with Indian driver names and company/trader affiliation */
 export const sampleVehicles: Vehicle[] = [
-  { id: 1, plateNo: 'TN 09 AB 1234', tareWeight: 5200, driverName: 'Ramesh Kumar', driverPhone: '98401 23456', isActive: true },
-  { id: 2, plateNo: 'TN 38 CW 6762', tareWeight: 7800, driverName: 'Rajesh Sharma', driverPhone: '98402 34567', isActive: true },
-  { id: 3, plateNo: 'KA 01 MJ 4412', tareWeight: 6100, driverName: 'Vikram Singh', driverPhone: '97401 55662', isActive: true },
-  { id: 4, plateNo: 'TN 42 DX 8819', tareWeight: 8500, driverName: 'G. Suresh', driverPhone: '98412 88771', isActive: true },
-  { id: 5, plateNo: 'AP 03 TR 7890', tareWeight: null, driverName: 'Suresh Kumar', driverPhone: '98404 78901', isActive: true },
-  { id: 6, plateNo: 'KL 07 BR 2345', tareWeight: 4800, driverName: 'Arun Karthik', driverPhone: '98405 89012', isActive: true },
+  { id: 1, plateNo: 'TN 09 AB 1234', companyName: 'Meghalai Steels', tareWeight: 5200, driverName: 'Ramesh Kumar', driverPhone: '98401 23456', isActive: true },
+  { id: 2, plateNo: 'TN 38 CW 6762', companyName: 'Sri Balaji Transport', tareWeight: 7800, driverName: 'Rajesh Sharma', driverPhone: '98402 34567', isActive: true },
+  { id: 3, plateNo: 'KA 01 MJ 4412', companyName: 'Karnataka Logistics Corp', tareWeight: 6100, driverName: 'Vikram Singh', driverPhone: '97401 55662', isActive: true },
+  { id: 4, plateNo: 'TN 42 DX 8819', companyName: 'Coimbatore Cargo Movers', tareWeight: 8500, driverName: 'G. Suresh', driverPhone: '98412 88771', isActive: true },
+  { id: 5, plateNo: 'AP 03 TR 7890', companyName: 'Rayalaseema Freight Carriers', tareWeight: null, driverName: 'Suresh Kumar', driverPhone: '98404 78901', isActive: true },
+  { id: 6, plateNo: 'KL 07 BR 2345', companyName: 'Kerala Roadways', tareWeight: 4800, driverName: 'Arun Karthik', driverPhone: '98405 89012', isActive: true },
 ];
 
 /**
@@ -583,6 +583,60 @@ export const sampleWarehouseEmployees: WarehouseEmployee[] = [
   { id: 205, name: 'T. Saravanan', role: 'handler', phone: '97105 55667', isActive: true },
 ];
 
+/** Sample Bays Master Table (replaces BAYS master table - Requirement 7) */
+export const sampleBays: BayMaster[] = [
+  {
+    id: 1,
+    bayNumber: 1,
+    bayName: 'Bay 1 (North Bulk Hopper)',
+    items: ['River Sand', 'Gravel (20mm)', 'White Rice (Grade A)'],
+    handlerId: 201,
+    handlerName: 'S. Mani',
+    description: 'Bulk hopper for sand, aggregates, and agricultural grains',
+    isActive: true,
+  },
+  {
+    id: 2,
+    bayNumber: 2,
+    bayName: 'Bay 2 (Aggregate Chute)',
+    items: ['Gravel (20mm)', 'River Sand', 'River Sand & Aggregate'],
+    handlerId: 202,
+    handlerName: 'P. Kumar',
+    description: 'Direct chute loading for crushed aggregates and coarse sand',
+    isActive: true,
+  },
+  {
+    id: 3,
+    bayNumber: 3,
+    bayName: 'Bay 3 (Steel Gantry)',
+    items: ['Scrap Steel', 'TMT Steel Bars', 'Heavy Structural Scrap'],
+    handlerId: 203,
+    handlerName: 'D. Rajesh',
+    description: 'Overhead crane gantry for billets, scrap steel, and rebar bundles',
+    isActive: true,
+  },
+  {
+    id: 4,
+    bayNumber: 4,
+    bayName: 'Bay 4 (Liquid & Agro Silo)',
+    items: ['Natural Rubber (SMR 20)', 'Palm Oil (Crude)', 'Palm Kernel', 'NPK Fertilizer'],
+    handlerId: 204,
+    handlerName: 'M. Arumugam',
+    description: 'Covered bay for bagged chemicals, fertilizer, and rubber slabs',
+    isActive: true,
+  },
+  {
+    id: 5,
+    bayNumber: 5,
+    bayName: 'Bay 5 (Timber & Dry Cargo)',
+    items: ['Timber Logs', 'Coconut (Fresh)', 'River Sand'],
+    handlerId: 205,
+    handlerName: 'T. Saravanan',
+    description: 'Flatbed gantry for timber, bulk wood, and agricultural produce',
+    isActive: true,
+  },
+];
+
 /** Sample Vehicle Entries at Gate / Entry Point */
 export const initialVehicleEntries: VehicleEntry[] = [
   {
@@ -804,6 +858,7 @@ export const initialDeliveryOrders: DeliveryOrderPlan[] = [
       },
     ],
     totalPlannedWeightKg: 14500,
+    weightToleranceKg: 50,
     inTime: '07:15:10 AM',
     planningStartTime: '07:18:00 AM',
     planningEndTime: '07:22:45 AM',
@@ -833,6 +888,9 @@ export const initialDeliveryOrders: DeliveryOrderPlan[] = [
     checkerName: 'P. Shanmugam',
     checkedAt: '09:00:20 AM',
     billingSettled: true,
+    exitWeightKg: 14750,
+    exitGateDecision: 'approved',
+    exitGateOfficer: 'R. Kumar (Exit Inspector)',
     exitedAt: '09:05:30 AM',
     items: [
       {
@@ -850,6 +908,7 @@ export const initialDeliveryOrders: DeliveryOrderPlan[] = [
       },
     ],
     totalPlannedWeightKg: 12000,
+    weightToleranceKg: 100,
     inTime: '08:29:20 AM',
     planningStartTime: '08:31:00 AM',
     planningEndTime: '08:34:30 AM',

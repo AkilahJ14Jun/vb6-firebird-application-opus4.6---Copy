@@ -117,6 +117,8 @@ export interface Vehicle {
   id: number;
   /** Vehicle registration/plate number */
   plateNo: string;
+  /** Company or Trader name to which the vehicle belongs */
+  companyName?: string;
   /** Known tare weight of the empty vehicle (for quick weighing) */
   tareWeight: number | null;
   driverName: string;
@@ -335,6 +337,17 @@ export interface WarehouseEmployee {
   isActive: boolean;
 }
 
+export interface BayMaster {
+  id: number;
+  bayNumber: number;
+  bayName: string;
+  items: string[]; // items available in this bay
+  handlerId?: number;
+  handlerName: string; // handler assigned for that bay
+  description?: string;
+  isActive: boolean;
+}
+
 export interface PlannedBayItem {
   id: string;
   bayNumber: number;
@@ -367,6 +380,8 @@ export interface DeliveryOrderPlan {
   baysCount: number;
   items: PlannedBayItem[];
   totalPlannedWeightKg: number;
+  /** Configurable weight tolerance in kg for this D.O (as per Changes required.txt) */
+  weightToleranceKg?: number;
   
   // Real-time tracking of vehicle location and checking
   currentLocation: string; // e.g. "Entry Gate", "Waiting for Bay 1", "At Bay 1 (North Bulk Hopper)", "At Checking Area", "Billing Section", "Exit Gate", "Exited Warehouse"
@@ -376,6 +391,12 @@ export interface DeliveryOrderPlan {
   discrepancyNotes?: string;
   discrepancyTargetBays?: number[];
   billingSettled?: boolean;
+
+  // Exit Gate Authorization
+  exitWeightKg?: number;
+  exitGateDecision?: 'approved' | 'override_approved' | 'rejected';
+  exitGateOfficer?: string;
+  exitGateNotes?: string;
   exitedAt?: string;
 
   // Timestamps & durations (12-hour format with seconds)
@@ -493,14 +514,17 @@ export type PageId =
   | 'dashboard'
   | 'vehicle-entry'
   | 'planning'
-  | 'multi-weighment'
   | 'weigh-in'
   | 'weigh-out'
+  | 'multi-weighment'
+  | 'checking'
+  | 'exit-gate'
   | 'tickets'
   | 'products'
   | 'customers'
   | 'suppliers'
   | 'vehicles'
+  | 'bay-master'
   | 'transactions'
   | 'reports'
   | 'daily-summary'

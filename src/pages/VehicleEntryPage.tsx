@@ -116,6 +116,7 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
       if (matched.driverName) setDriverName(matched.driverName);
       if (matched.driverPhone) setMobileNumber(matched.driverPhone);
       if (matched.tareWeight) setEntryWeight(matched.tareWeight);
+      if (matched.companyName && !customerName) setCustomerName(matched.companyName);
     }
   };
 
@@ -553,6 +554,7 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
                 </label>
                 <input
                   type="text"
+                  list="registered-vehicles-list"
                   value={vehicleNumber}
                   onChange={e => handleVehicleSelect(e.target.value)}
                   placeholder="e.g. TN38CW6762"
@@ -561,6 +563,13 @@ export const VehicleEntryPage: React.FC<VehicleEntryPageProps> = ({
                     errors.vehicleNumber ? 'border-red-400 bg-red-50/50' : 'border-slate-300'
                   )}
                 />
+                <datalist id="registered-vehicles-list">
+                  {vehicles.map(v => (
+                    <option key={v.id} value={v.plateNo}>
+                      {v.companyName ? `${v.companyName} • ` : ''}{v.driverName}
+                    </option>
+                  ))}
+                </datalist>
                 {errors.vehicleNumber && (
                   <p className="text-[11px] text-red-500 mt-1">{errors.vehicleNumber}</p>
                 )}

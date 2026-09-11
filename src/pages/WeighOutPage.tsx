@@ -1,300 +1,665 @@
 /**
  * ============================================================================
- * WEIGH-OUT PAGE
+ * UNLOADING OPERATIONS PAGE
  * ============================================================================
- * Replaces: frmWeighOut from VB6
- *
- * ORIGINAL VB6 BEHAVIOR:
- *   1. Operator selects an open ticket from list/combo
- *   2. Scale reads tare weight (empty vehicle)
- *   3. System calculates: Net Weight = Gross Weight - Tare Weight
- *   4. System calculates: Total Amount = Net Weight × Unit Price
- *   5. Ticket status changes to CLOSED
- *   6. SP_CLOSE_TICKET creates a TRANSACTION record
- *   7. Ticket prints with all weights and amount
- *
- * MODERN IMPLEMENTATION:
- *   - Shows all open tickets in a selectable list
- *   - Live scale display for tare weight capture
- *   - Auto-calculates net weight and total amount
- *   - Option to use vehicle's known tare weight
+ * Fulfills Requirements 12, 13, 14, 15 from Changes required.txt:
+ * - Line 12: "Similaryly in 'Unloading' page the user should be able to
+ *            select from a list of vehicle number or D.O number for the
+ *            unloading activity. Here also time has to be captured in each
+ *            bay for the unloading activity."
+ * - Line 13: "This 'Unloading' page the user should be able to select each
+ *            bay and item being loaded [unloaded]."
+ * - Line 14: "Both on 'Loading' page and 'Unloading' page the 'Finish Loading'
+ *            / 'Finish Unloading' checkbox should be visible for the user to
+ *            mark the completion of all tasks for a given D.O"
+ * - Line 15: "Once loading or unloading activity is marked as finished then
+ *            it has to go the checking section."
  * ============================================================================
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import type { Ticket } from '@/types';
-// formatNow would be used in production for timestamp recording
-import { Scale, CheckCircle2, Zap, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import type { Ticket, DeliveryOrderPlan, BayMaster } from '@/types';
+import { formatTime12, formatDuration, sampleBays } from '@/store/appStore';
 import { cn } from '@/utils/cn';
+import {
+  Scale, ArrowUpFromLine, CheckCircle2, Clock, Truck, Layers,
+  Check, AlertTriangle, ArrowRight, UserCheck, Package,
+  RotateCcw, MapPin, Search
+} from 'lucide-react';
 
 interface WeighOutPageProps {
-  /** Only open tickets can be weighed out */
-  tickets: Ticket[];
-  onComplete: (ticketId: number, tareWeight: number) => void;
+  tickets?: Ticket[];
+  deliveryOrders?: DeliveryOrderPlan[];
+  bays?: BayMaster[];
+  onComplete?: (ticketId: number, tareWeight: number) => void;
+  onUpdateDeliveryOrder?: (order: DeliveryOrderPlan) => void;
+  onNavigateToChecking?: (deliveryOrderId: number) => void;
 }
 
-export function WeighOutPage({ tickets, onComplete }: WeighOutPageProps) {
-  const openTickets = tickets.filter(t => t.status === 'open');
-  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
-  const [completed, setCompleted] = useState(false);
+export function WeighOutPage({
+  tickets: _tickets = [],
+  deliveryOrders = [],
+  bays = sampleBays,
+  onComplete: _onComplete,
+  onUpdateDeliveryOrder,
+  onNavigateToChecking,
+}: WeighOutPageProps) {
+  const availableBays = bays && bays.length > 0 ? bays : sampleBays;
 
-  /* ── Simulated Scale (same approach as WeighIn) ───────────────────── */
-  const [liveWeight, setLiveWeight] = useState(0);
-  const [scaleStable, setScaleStable] = useState(false);
-  const [capturedTare, setCapturedTare] = useState<number | null>(null);
+  // Active delivery orders
+  const activeDOs = deliveryOrders.filter(d => d.status !== 'exited');
+
+  // Requirement 12: Select from a list of vehicle number or D.O number
+  const [selectedDOId, setSelectedDOId] = useState<number | null>(() => {
+    return activeDOs[0]?.id || null;
+  });
+  const [searchFilter, setSearchFilter] = useState('');
+
+  const currentDO = deliveryOrders.find(d => d.id === selectedDOId);
+
+  // Requirement 13: Select each bay and item being unloaded
+  const [selectedBayNumber, setSelectedBayNumber] = useState<number>(() => {
+    return currentDO?.items[0]?.bayNumber || availableBays[0]?.bayNumber || 1;
+  });
+
+  const activeBayMaster = availableBays.find(b => b.bayNumber === selectedBayNumber) || availableBays[0];
+
+  const [selectedItemName, setSelectedItemName] = useState<string>(() => {
+    return activeBayMaster?.items[0] || 'Scrap Steel';
+  });
 
   useEffect(() => {
-    // Simulate a tare weight (lighter vehicle without cargo)
-    const targetWeight = 4000 + Math.random() * 6000;
-    let currentWeight = 0;
+    if (currentDO && currentDO.items.length > 0) {
+      const firstBay = currentDO.items[0].bayNumber;
+      setSelectedBayNumber(firstBay);
+      const bayData = availableBays.find(b => b.bayNumber === firstBay);
+      setSelectedItemName(currentDO.items[0].itemName || bayData?.items[0] || 'Scrap Steel');
+    }
+  }, [currentDO?.id]);
+
+  const handleSelectBay = (bayNum: number) => {
+    setSelectedBayNumber(bayNum);
+    const bayData = availableBays.find(b => b.bayNumber === bayNum);
+    if (bayData && bayData.items.length > 0) {
+      const plannedForThisBay = currentDO?.items.find(i => i.bayNumber === bayNum);
+      setSelectedItemName(plannedForThisBay?.itemName || bayData.items[0]);
+    }
+  };
+
+  // Weight capture via weighing scale or manual entry mode
+  const [captureMode, setCaptureMode] = useState<'scale' | 'manual'>('scale');
+  const [liveScaleWeight, setLiveScaleWeight] = useState(4500);
+  const [capturedWeight, setCapturedWeight] = useState<number | null>(null);
+  const [manualWeightInput, setManualWeightInput] = useState<string>('4500');
+
+  useEffect(() => {
     const interval = setInterval(() => {
-      if (currentWeight < targetWeight) {
-        currentWeight += targetWeight / 15 + (Math.random() - 0.5) * 300;
-        if (currentWeight > targetWeight) currentWeight = targetWeight;
-        setScaleStable(false);
-      } else {
-        currentWeight = targetWeight + (Math.random() - 0.5) * 15;
-        setScaleStable(true);
-      }
-      setLiveWeight(Math.round(currentWeight));
-    }, 200);
+      setLiveScaleWeight(prev => Math.round(prev + (Math.random() - 0.5) * 15));
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const captureWeight = useCallback(() => {
-    setCapturedTare(liveWeight);
-  }, [liveWeight]);
+  const handleCaptureFromScale = useCallback(() => {
+    setCapturedWeight(liveScaleWeight);
+    setManualWeightInput(liveScaleWeight.toString());
+  }, [liveScaleWeight]);
 
-  const selectedTicket = openTickets.find(t => t.id === selectedTicketId);
-  const netWeight = selectedTicket && capturedTare
-    ? (selectedTicket.grossWeight || 0) - capturedTare
-    : null;
-  const totalAmount = netWeight && selectedTicket?.unitPrice
-    ? Math.round(netWeight * selectedTicket.unitPrice * 100) / 100
-    : null;
-
-  const handleComplete = () => {
-    if (!selectedTicketId || !capturedTare) return;
-    onComplete(selectedTicketId, capturedTare);
-    setCompleted(true);
-    setSelectedTicketId(null);
-    setCapturedTare(null);
-    setTimeout(() => setCompleted(false), 3000);
+  const handleManualWeightChange = (val: string) => {
+    setManualWeightInput(val);
+    const num = Number(val);
+    if (!isNaN(num) && num >= 0) {
+      setCapturedWeight(num);
+    }
   };
+
+  // Requirement 12: Automated Bay Entry & Exit Time for Unloading Activity
+  const [isInsideBay, setIsInsideBay] = useState(false);
+  const [bayEntryTime, setBayEntryTime] = useState<string>('');
+  const [bayDurationSecs, setBayDurationSecs] = useState(0);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    if (isInsideBay) {
+      timer = setInterval(() => {
+        setBayDurationSecs(prev => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isInsideBay]);
+
+  const handleRecordBayEntry = () => {
+    const entryNow = formatTime12();
+    setBayEntryTime(entryNow);
+    setBayDurationSecs(0);
+    setIsInsideBay(true);
+  };
+
+  const handleRecordBayExit = () => {
+    if (!currentDO) return;
+    const exitNow = formatTime12();
+    const finalWeight = capturedWeight ?? Number(manualWeightInput) ?? 5000;
+
+    const updatedItems = currentDO.items.map(item => {
+      if (item.bayNumber === selectedBayNumber && item.itemName === selectedItemName) {
+        return {
+          ...item,
+          actualLoadedWeightKg: finalWeight,
+          pendingWeightKg: 0,
+          notes: `Unloaded at ${activeBayMaster?.bayName} (Entry: ${bayEntryTime}, Exit: ${exitNow})`,
+        };
+      }
+      return item;
+    });
+
+    const updatedDO: DeliveryOrderPlan = {
+      ...currentDO,
+      items: updatedItems,
+      currentLocation: `Unloaded at ${activeBayMaster?.bayName} (${exitNow})`,
+      status: 'in_progress',
+    };
+
+    onUpdateDeliveryOrder?.(updatedDO);
+    setIsInsideBay(false);
+    alert(`✓ Unloading recorded at ${exitNow}. Offloaded weight recorded: ${finalWeight.toLocaleString()} kg.`);
+  };
+
+  // Requirement 14 & 15: Finish Unloading Checkbox
+  const [finishUnloadingChecked, setFinishUnloadingChecked] = useState(false);
+  const [unloadingCompletedSuccess, setUnloadingCompletedSuccess] = useState(false);
+
+  const handleCompleteFinishUnloading = () => {
+    if (!currentDO) return;
+    if (!finishUnloadingChecked) {
+      alert('Please check the "Finish Unloading" checkbox to confirm completion of all tasks.');
+      return;
+    }
+
+    const updatedDO: DeliveryOrderPlan = {
+      ...currentDO,
+      status: 'awaiting_check',
+      checkingStatus: 'pending',
+      currentLocation: 'At Checking Area',
+    };
+
+    onUpdateDeliveryOrder?.(updatedDO);
+    setUnloadingCompletedSuccess(true);
+  };
+
+  const filteredDOs = activeDOs.filter(d => {
+    const q = searchFilter.toLowerCase();
+    return (
+      d.vehicleNumber.toLowerCase().includes(q) ||
+      d.doNumber.toLowerCase().includes(q) ||
+      d.customerName.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* ── Page Header ────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-slate-800">Unloading Operations</h2>
-            <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">
-              Formerly Weigh Out
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <ArrowUpFromLine className="w-6 h-6 text-purple-600" />
+              Unloading Operations
+            </h2>
+            <span className="text-xs bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full">
+              Bay Unloading Activity
             </span>
           </div>
           <p className="text-sm text-slate-500 mt-0.5">
-            Before unloading activity: View previous weight, weight offloaded in bay, and gross weight after unloading
+            Select vehicle/D.O, capture weight via scale or manual mode, track bay entry/exit times, and mark unloading finish (Requirements 12, 13, 14, 15).
           </p>
         </div>
-        {completed && (
-          <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg text-sm font-medium">
-            ✓ Unloading completed and ticket closed successfully!
+
+        {currentDO && (
+          <div className="flex items-center gap-2 font-mono text-xs bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs">
+            <span className="text-slate-400">Tolerance:</span>
+            <span className="font-bold text-amber-700">±{currentDO.weightToleranceKg ?? 50} kg</span>
           </div>
         )}
       </div>
 
-      {openTickets.length === 0 ? (
-        <div className="bg-white rounded-xl shadow border border-slate-200 p-12 text-center">
-          <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-600">No Open Tickets for Unloading</h3>
-          <p className="text-sm text-slate-400 mt-1">All tickets have been completed. Create a new loading ticket first.</p>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {/* ── Before Unloading Activity Display (Requirement 7) ────────── */}
-          {selectedTicket && (
-            <div className="bg-gradient-to-r from-amber-50 via-slate-50 to-purple-50 border border-amber-200 rounded-xl p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-                  <Scale className="w-4 h-4 text-amber-600" />
-                  Before Unloading Activity — Weight Calculation & Preview
-                </p>
-                <span className="text-[11px] text-slate-500 font-medium">
-                  Ticket: <strong className="font-mono">{selectedTicket.ticketNo}</strong> ({selectedTicket.vehiclePlateNo})
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
-                <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-xs">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Previous Weight (Before Unloading)
-                  </p>
-                  <p className="text-xl font-mono font-black text-slate-800 mt-1">
-                    {selectedTicket.grossWeight?.toLocaleString()} kg
-                  </p>
-                  <p className="text-[10px] text-slate-400">Gross loaded weight</p>
-                </div>
-
-                <div className="p-3 bg-white rounded-lg border border-amber-200 shadow-xs">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600">
-                    Weight Offloaded in Bay
-                  </p>
-                  <p className="text-xl font-mono font-black text-amber-700 mt-1">
-                    -{netWeight ? netWeight.toLocaleString() : (selectedTicket.grossWeight ? (selectedTicket.grossWeight - liveWeight).toLocaleString() : '—')} kg
-                  </p>
-                  <p className="text-[10px] text-amber-500">Material offloaded / discharged</p>
-                </div>
-
-                <div className="p-3 bg-white rounded-lg border border-purple-200 shadow-xs">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-purple-600">
-                    Gross Weight After Unloading
-                  </p>
-                  <p className="text-xl font-mono font-black text-purple-800 mt-1">
-                    {(capturedTare ? capturedTare : liveWeight).toLocaleString()} kg
-                  </p>
-                  <p className="text-[10px] text-purple-500">Previous - Offloaded (Empty Tare)</p>
-                </div>
-              </div>
-            </div>
+      {unloadingCompletedSuccess && (
+        <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl text-purple-800 text-sm font-semibold flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-purple-600 flex-shrink-0" />
+            <span>
+              ✓ Unloading finished for D.O {currentDO?.doNumber}! The vehicle has been transferred to the <strong>Checking Section</strong>.
+            </span>
+          </div>
+          {onNavigateToChecking && currentDO && (
+            <button
+              type="button"
+              onClick={() => onNavigateToChecking(currentDO.id)}
+              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm"
+            >
+              Go to Checking Section →
+            </button>
           )}
+        </div>
+      )}
 
-          <div className="grid lg:grid-cols-3 gap-6">
-            {/* ── Open Tickets List ────────────────────────────────── */}
-            <div className="bg-white rounded-xl shadow border border-slate-200 p-4">
-              <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2 text-sm">
-                <Scale className="w-4 h-4 text-amber-500" />
-                Select Ticket for Unloading ({openTickets.length})
-              </h3>
-              <div className="space-y-2">
-                {openTickets.map((t) => (
+      {/* ── Main Two-Column Layout ──────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Requirement 12: Left Column - Vehicle or D.O Selection List (4 cols) */}
+        <div className="lg:col-span-4 space-y-3">
+          {/* Quick Selection Dropdown Lists for D.O and Vehicle Numbers */}
+          <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-xs space-y-2.5">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                Select by D.O Number
+              </label>
+              <select
+                value={selectedDOId || ''}
+                onChange={e => {
+                  const id = Number(e.target.value);
+                  if (id) {
+                    setSelectedDOId(id);
+                    setUnloadingCompletedSuccess(false);
+                    setFinishUnloadingChecked(false);
+                  }
+                }}
+                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none"
+              >
+                <option value="">-- Select D.O Number --</option>
+                {activeDOs.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.doNumber} ({d.vehicleNumber} - {d.customerName})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                Select by Vehicle Number
+              </label>
+              <select
+                value={selectedDOId || ''}
+                onChange={e => {
+                  const id = Number(e.target.value);
+                  if (id) {
+                    setSelectedDOId(id);
+                    setUnloadingCompletedSuccess(false);
+                    setFinishUnloadingChecked(false);
+                  }
+                }}
+                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold uppercase text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none"
+              >
+                <option value="">-- Select Vehicle Number --</option>
+                {activeDOs.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.vehicleNumber} (D.O: {d.doNumber})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by Vehicle No or D.O No..."
+              value={searchFilter}
+              onChange={e => setSearchFilter(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-purple-500 outline-none"
+            />
+          </div>
+
+          <div className="space-y-2 max-h-[650px] overflow-y-auto pr-1">
+            {filteredDOs.length === 0 ? (
+              <div className="p-6 bg-white border border-slate-200 rounded-xl text-center text-slate-400 text-xs">
+                No active unloading orders found.
+              </div>
+            ) : (
+              filteredDOs.map(d => {
+                const isSelected = d.id === selectedDOId;
+                const itemsCount = d.items.length;
+                const unloadedCount = d.items.filter(i => (i.actualLoadedWeightKg || 0) > 0).length;
+
+                return (
                   <button
-                    key={t.id}
-                    onClick={() => { setSelectedTicketId(t.id); setCapturedTare(null); }}
+                    key={d.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedDOId(d.id);
+                      setUnloadingCompletedSuccess(false);
+                      setFinishUnloadingChecked(false);
+                    }}
                     className={cn(
-                      'w-full text-left p-3 rounded-lg border transition',
-                      selectedTicketId === t.id
-                        ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-500'
-                        : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                      'w-full p-3 rounded-xl border text-left transition-all',
+                      isSelected
+                        ? 'bg-purple-50/90 border-purple-500 shadow-md ring-2 ring-purple-400/30'
+                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 shadow-xs'
                     )}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-slate-800">{t.ticketNo}</span>
-                      <span className={cn(
-                        'text-[10px] font-bold px-1.5 py-0.5 rounded',
-                        t.type === 'purchase' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
-                      )}>
-                        {t.type === 'purchase' ? 'BUY' : 'SELL'}
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="font-mono text-xs font-bold text-slate-900 uppercase">
+                        {d.vehicleNumber}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                        {unloadedCount}/{itemsCount} Unloaded
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">{t.vehiclePlateNo} · {t.productName}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Previous Gross: {t.grossWeight?.toLocaleString()} kg · In: {t.weighInAt?.split(' ')[1]}
+
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span className="font-mono text-purple-700 font-semibold">{d.doNumber}</span>
+                      <span className="font-mono">Planned: {d.totalPlannedWeightKg.toLocaleString()} kg</span>
+                    </div>
+
+                    <p className="text-xs text-slate-700 font-medium truncate mt-1">{d.customerName}</p>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                      Driver: {d.driverName} | Supervisor: {d.supervisorName}
                     </p>
                   </button>
-                ))}
-              </div>
-            </div>
+                );
+              })
+            )}
+          </div>
+        </div>
 
-            {/* ── Scale & Weighing ────────────────────────────────── */}
-            <div className="lg:col-span-2 space-y-4">
-              {/* Scale Display */}
-              <div className="bg-white rounded-xl shadow border border-slate-200 p-6">
-                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                  <Scale className="w-4 h-4 text-emerald-500" />
-                  Scale — Unloaded / Tare Weight Reading
-                </h3>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className={cn(
-                    'w-2 h-2 rounded-full',
-                    scaleStable ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
-                  )} />
-                  <span className="text-xs text-slate-500">{scaleStable ? 'Stable' : 'Stabilizing...'}</span>
+        {/* Right Column: Unloading Activity Details (8 cols) */}
+        <div className="lg:col-span-8">
+          {currentDO ? (
+            <div className="bg-white rounded-xl shadow border border-slate-200 p-6 space-y-6">
+              {/* Selected Order Summary Card */}
+              <div className="p-4 bg-gradient-to-r from-purple-50/50 via-slate-50 to-indigo-50/40 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-mono text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
+                      {currentDO.doNumber}
+                    </span>
+                    <span className="text-xs text-slate-500">Slip #{currentDO.slipNo}</span>
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900 font-mono uppercase flex items-center gap-2">
+                    <Truck className="w-5 h-5 text-purple-600" />
+                    {currentDO.vehicleNumber}
+                    <span className="text-sm font-sans font-normal text-slate-500 normal-case">
+                      ({currentDO.customerName})
+                    </span>
+                  </h3>
                 </div>
-                <div className={cn(
-                  'bg-slate-900 rounded-xl p-6 text-center mb-4',
-                  scaleStable ? 'ring-2 ring-emerald-500' : ''
-                )}>
-                  <p className="text-4xl font-mono font-bold text-emerald-400 tracking-wider">
-                    {liveWeight.toLocaleString()}
-                  </p>
-                  <p className="text-slate-500 text-xs mt-1">kg (Weight After Unloading)</p>
+
+                <div className="text-right text-xs">
+                  <p className="text-slate-500">Location:</p>
+                  <p className="font-bold text-purple-700 text-sm mt-0.5">{currentDO.currentLocation}</p>
+                  <p className="text-[11px] text-slate-400">Supervisor: {currentDO.supervisorName}</p>
                 </div>
-                <button
-                  onClick={captureWeight}
-                  disabled={!selectedTicketId}
-                  className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-semibold rounded-lg hover:from-amber-600 hover:to-orange-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                >
-                  <Zap className="w-4 h-4" /> Capture Unloaded Tare Weight
-                </button>
               </div>
 
-              {/* Calculation Summary — mirrors the summary section in frmWeighOut */}
-              {selectedTicket && (
-                <div className="bg-white rounded-xl shadow border border-slate-200 p-6">
-                  <h3 className="font-bold text-slate-800 mb-4">Unloading Weight Breakdown</h3>
-                  <div className="grid grid-cols-3 gap-4 mb-4">
-                    <div className="p-4 bg-blue-50 rounded-lg text-center border border-blue-200">
-                      <p className="text-xs text-blue-600 font-medium">Previous Weight</p>
-                      <p className="text-xl font-bold text-blue-800 font-mono mt-1">
-                        {selectedTicket.grossWeight?.toLocaleString()}
-                      </p>
-                      <p className="text-[10px] text-blue-500">kg (Before Unloading)</p>
-                    </div>
-                    <div className="p-4 bg-amber-50 rounded-lg text-center border border-amber-200">
-                      <p className="text-xs text-amber-600 font-medium">Weight Offloaded</p>
-                      <p className="text-xl font-bold text-amber-800 font-mono mt-1">
-                        {netWeight ? netWeight.toLocaleString() : '—'}
-                      </p>
-                      <p className="text-[10px] text-amber-500">kg (Offloaded in Bay)</p>
-                    </div>
-                    <div className={cn(
-                      'p-4 rounded-lg text-center border',
-                      capturedTare ? 'bg-purple-50 border-purple-200' : 'bg-slate-50 border-slate-200'
-                    )}>
-                      <p className="text-xs text-purple-600 font-medium">Gross After Unloading</p>
-                      <p className="text-xl font-bold text-purple-800 font-mono mt-1">
-                        {capturedTare ? capturedTare.toLocaleString() : '—'}
-                      </p>
-                      <p className="text-[10px] text-purple-500">kg (Vehicle Tare)</p>
+              {/* Requirement 13: Select Bay & Item for Unloading based on Bay Master */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-purple-600" />
+                  Bay & Item Selection (Unloading Master)
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Select Bay */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      Unloading Bay *
+                    </label>
+                    <select
+                      value={selectedBayNumber}
+                      onChange={e => handleSelectBay(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none"
+                    >
+                      {availableBays.map(b => (
+                        <option key={b.id} value={b.bayNumber}>
+                          Bay #{b.bayNumber}: {b.bayName}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1">
+                      <UserCheck className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Handler Assigned: <strong>{activeBayMaster?.handlerName}</strong></span>
                     </div>
                   </div>
 
-                  {/* Amount calculation */}
-                  {totalAmount !== null && (
-                    <div className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="text-xs text-purple-600">Unit Price: ₹ {selectedTicket.unitPrice} / {products_unit(selectedTicket)}</p>
-                          <p className="text-xs text-purple-500 mt-0.5">
-                            {netWeight?.toLocaleString()} kg × ₹ {selectedTicket.unitPrice}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-purple-600 font-medium">Total Amount</p>
-                          <p className="text-2xl font-bold text-purple-800">₹ {totalAmount.toLocaleString()}</p>
-                        </div>
+                  {/* Select Item */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      Item Being Discharged / Unloaded *
+                    </label>
+                    <select
+                      value={selectedItemName}
+                      onChange={e => setSelectedItemName(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none"
+                    >
+                      {activeBayMaster?.items.map((item, idx) => (
+                        <option key={idx} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Select item designated for offloading at Bay #{activeBayMaster?.bayNumber}.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Requirement 12: Automated Bay Entry & Exit Time for Unloading */}
+              <div className="p-4 bg-gradient-to-r from-purple-50/50 to-indigo-50/40 border border-purple-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-purple-900 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-purple-600" />
+                    Automated Bay Entry & Exit Time (Unloading Activity)
+                  </h4>
+                  {isInsideBay && (
+                    <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded font-mono font-bold text-xs flex items-center gap-1 border border-purple-300">
+                      <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                      Inside Bay: {formatDuration(bayDurationSecs)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  {!isInsideBay ? (
+                    <button
+                      type="button"
+                      onClick={handleRecordBayEntry}
+                      className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-xs transition flex items-center justify-center gap-2 shadow-xs"
+                    >
+                      <Clock className="w-4 h-4" />
+                      Record Entry into {activeBayMaster?.bayName}
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white border border-purple-200 rounded-lg text-xs">
+                        <span className="text-[10px] uppercase text-slate-400 block font-bold">Bay Entry Time</span>
+                        <span className="font-mono font-bold text-purple-900">{bayEntryTime}</span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={handleRecordBayExit}
+                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition flex items-center gap-2 shadow-xs"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        Record Discharged Weight & Exit Bay
+                      </button>
                     </div>
                   )}
+                </div>
+              </div>
 
-                  {/* Complete button */}
+              {/* Weight Capture via Weighing Scale or Manual Entry Mode */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-purple-600" />
+                    Weight Capture Mode (Scale vs Manual)
+                  </h4>
+
+                  <div className="flex bg-slate-200 p-0.5 rounded-lg text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setCaptureMode('scale')}
+                      className={cn(
+                        'px-3 py-1 rounded-md transition',
+                        captureMode === 'scale' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      )}
+                    >
+                      Weighing Scale
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCaptureMode('manual')}
+                      className={cn(
+                        'px-3 py-1 rounded-md transition',
+                        captureMode === 'manual' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      )}
+                    >
+                      Manual Entry Mode
+                    </button>
+                  </div>
+                </div>
+
+                {captureMode === 'scale' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                    <div className="p-4 bg-slate-900 text-white rounded-xl flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+                          Scale Port COM3 (Live Weight)
+                        </span>
+                        <p className="text-3xl font-mono font-black text-purple-400 mt-1">
+                          {liveScaleWeight.toLocaleString()} <span className="text-sm text-slate-400 font-normal">kg</span>
+                        </p>
+                      </div>
+                      <span className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs font-bold">
+                        STABLE
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleCaptureFromScale}
+                      className="h-full py-4 px-6 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-sm transition flex items-center justify-center gap-2 shadow-md shadow-purple-600/20"
+                    >
+                      <Scale className="w-5 h-5" />
+                      Capture Weight from Scale ({liveScaleWeight.toLocaleString()} kg)
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-white border border-slate-300 rounded-xl space-y-2">
+                    <label className="block text-xs font-bold uppercase text-slate-600">
+                      Manual Discharged Weight Entry (kg) *
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        step="10"
+                        placeholder="Enter weight offloaded..."
+                        value={manualWeightInput}
+                        onChange={e => handleManualWeightChange(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-slate-300 rounded-lg font-mono text-base font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleManualWeightChange('12000')}
+                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold"
+                      >
+                        +12,000 kg
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Items & Unloaded Records Table */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                  D.O Items & Unloaded Weights Progress
+                </h4>
+                <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px]">
+                      <tr>
+                        <th className="py-2.5 px-3">Bay #</th>
+                        <th className="py-2.5 px-3">Bay Name</th>
+                        <th className="py-2.5 px-3">Item Name</th>
+                        <th className="py-2.5 px-3 text-right">Planned (kg)</th>
+                        <th className="py-2.5 px-3 text-right">Actual Unloaded (kg)</th>
+                        <th className="py-2.5 px-3">Unloading Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {currentDO.items.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-mono font-bold text-purple-700">#{item.bayNumber}</td>
+                          <td className="py-2 px-3 font-medium text-slate-800">{item.bayName}</td>
+                          <td className="py-2 px-3 font-semibold text-slate-900">{item.itemName}</td>
+                          <td className="py-2 px-3 font-mono text-slate-600 text-right">{item.plannedWeightKg.toLocaleString()} kg</td>
+                          <td className="py-2 px-3 font-mono font-bold text-slate-900 text-right">
+                            {(item.actualLoadedWeightKg || 0) > 0 ? (
+                              <span className="text-purple-700">{item.actualLoadedWeightKg?.toLocaleString()} kg</span>
+                            ) : (
+                              <span className="text-slate-400 italic">0 kg</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3">
+                            {(item.actualLoadedWeightKg || 0) > 0 ? (
+                              <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-bold">
+                                ✓ Unloaded
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                                Pending
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Requirement 14 & 15: Finish Unloading Checkbox & Dispatch to Checking Section */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="finishUnloadingCheckbox"
+                    checked={finishUnloadingChecked}
+                    onChange={e => setFinishUnloadingChecked(e.target.checked)}
+                    className="w-5 h-5 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+                  />
+                  <label htmlFor="finishUnloadingCheckbox" className="text-xs font-bold text-slate-800 cursor-pointer">
+                    Finish Unloading — Mark completion of all tasks for D.O {currentDO.doNumber}
+                  </label>
+                </div>
+                <p className="text-[11px] text-slate-500 pl-8">
+                  Once unloading is marked finished, the vehicle and Delivery Order will transition to the <strong>Checking Section</strong> for item and quantity verification (Requirement 15).
+                </p>
+
+                <div className="pt-1 pl-8">
                   <button
-                    onClick={handleComplete}
-                    disabled={!capturedTare || !netWeight || netWeight <= 0}
-                    className="w-full mt-4 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold rounded-lg hover:from-emerald-600 hover:to-teal-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
+                    type="button"
+                    onClick={handleCompleteFinishUnloading}
+                    disabled={!finishUnloadingChecked}
+                    className="py-3 px-6 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold rounded-xl text-xs transition flex items-center gap-2 shadow-md shadow-purple-700/20"
                   >
-                    <CheckCircle2 className="w-5 h-5" /> Complete Unloading & Close Ticket
+                    <CheckCircle2 className="w-4 h-4" />
+                    Submit & Send to Checking Section
                   </button>
                 </div>
-              )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow border border-slate-200 p-12 text-center text-slate-400 text-sm">
+              Please select a vehicle or D.O from the list to begin unloading operations.
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
-}
-
-/** Helper to display unit info */
-function products_unit(_ticket: Ticket): string {
-  return 'kg';
 }

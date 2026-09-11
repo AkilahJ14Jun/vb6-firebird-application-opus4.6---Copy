@@ -17,11 +17,11 @@
 import React, { useState, useEffect } from 'react';
 import type {
   VehicleEntry, DeliveryOrderPlan, PlannedBayItem,
-  WarehouseEmployee, Product
+  WarehouseEmployee, Product, BayMaster
 } from '@/types';
 import {
   formatTime12, formatDuration, nextDONo, formatNow, nextId,
-  getDeviationStatus, standardTimeLimits
+  getDeviationStatus, standardTimeLimits, sampleBays
 } from '@/store/appStore';
 import { DeliveryOrderModal } from '@/components/DeliveryOrderModal';
 import { cn } from '@/utils/cn';
@@ -37,12 +37,14 @@ interface PlanningPageProps {
   deliveryOrders: DeliveryOrderPlan[];
   employees: WarehouseEmployee[];
   products: Product[];
+  bays?: BayMaster[];
   selectedVehicleEntryId?: number;
   onSaveDeliveryOrder: (order: DeliveryOrderPlan) => void;
   onNavigateToWeighment: (deliveryOrderId?: number) => void;
 }
 
-interface BayDraft {
+interface PlannedItemDraft {
+  id: string;
   bayNumber: number;
   bayName: string;
   handlerName: string;
@@ -58,10 +60,12 @@ export const PlanningPage: React.FC<PlanningPageProps> = ({
   deliveryOrders,
   employees,
   products,
+  bays: inputBays,
   selectedVehicleEntryId,
   onSaveDeliveryOrder,
   onNavigateToWeighment,
 }) => {
+  const availableBays = inputBays && inputBays.length > 0 ? inputBays : sampleBays;
   const planners = employees.filter(e => e.role === 'planner');
   const supervisors = employees.filter(e => e.role === 'supervisor');
   const handlers = employees.filter(e => e.role === 'handler');
@@ -151,69 +155,73 @@ export const PlanningPage: React.FC<PlanningPageProps> = ({
   // ── Planning Form State ────────────────────────────────────────────────
   const [plannerName, setPlannerName] = useState(planners[0]?.name || 'N. Rajesh');
   const [supervisorName, setSupervisorName] = useState(supervisors[0]?.name || 'K. Murugan');
-  const [bays, setBays] = useState<BayDraft[]>([
+  
+  // Planned items allowing multiple items per bay (Requirement 6)
+  const [plannedItems, setPlannedItems] = useState<PlannedItemDraft[]>([
     {
+      id: 'item-1',
       bayNumber: 1,
-      bayName: 'Bay 1 (North Bulk Hopper)',
-      handlerName: handlers[0]?.name || 'S. Mani',
+      bayName: availableBays[0]?.bayName || 'Bay 1 (North Bulk Hopper)',
+      handlerName: availableBays[0]?.handlerName || handlers[0]?.name || 'S. Mani',
+      handlerId: availableBays[0]?.handlerId || handlers[0]?.id,
       itemCode: 'SND-01',
-      itemName: 'River Sand',
+      itemName: availableBays[0]?.items[0] || 'River Sand',
       plannedWeightKg: 8500,
     },
     {
+      id: 'item-2',
       bayNumber: 2,
-      bayName: 'Bay 2 (Aggregate Chute)',
-      handlerName: handlers[1]?.name || 'P. Kumar',
+      bayName: availableBays[1]?.bayName || 'Bay 2 (Aggregate Chute)',
+      handlerName: availableBays[1]?.handlerName || handlers[1]?.name || 'P. Kumar',
+      handlerId: availableBays[1]?.handlerId || handlers[1]?.id,
       itemCode: 'GRV-01',
-      itemName: 'Gravel (20mm)',
+      itemName: availableBays[1]?.items[0] || 'Gravel (20mm)',
       plannedWeightKg: 6000,
     },
   ]);
 
+  // Configurable weight tolerance in kg for each D.O (Requirement 6)
+  const [weightToleranceKg, setWeightToleranceKg] = useState<number>(50);
+
   const [activeDOModal, setActiveDOModal] = useState<DeliveryOrderPlan | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // ── Bay manipulation ───────────────────────────────────────────────────
-  const handleAddBay = () => {
-    const nextBayNum = bays.length + 1;
-    const defaultHandler = handlers[(nextBayNum - 1) % handlers.length]?.name || 'Handler';
-    const defaultProduct = products[(nextBayNum - 1) % products.length];
+  // ── Items manipulation (select from configured bays) ──────────────────
+  const handleAddItem = (presetBayNumber?: number) => {
+    const targetBay = availableBays.find(b => b.bayNumber === presetBayNumber) || availableBays[0];
+    const defaultItemName = targetBay.items[0] || products[0]?.name || 'River Sand';
+    const matchProd = products.find(p => p.name === defaultItemName);
 
-    setBays(prev => [
+    setPlannedItems(prev => [
       ...prev,
       {
-        bayNumber: nextBayNum,
-        bayName: `Bay ${nextBayNum} (Loading Deck)`,
-        handlerName: defaultHandler,
-        itemCode: defaultProduct?.code || '',
-        itemName: defaultProduct?.name || 'Material Item',
+        id: `item-${Date.now()}-${prev.length + 1}`,
+        bayNumber: targetBay.bayNumber,
+        bayName: targetBay.bayName,
+        handlerName: targetBay.handlerName,
+        handlerId: targetBay.handlerId,
+        itemCode: matchProd?.code || '',
+        itemName: defaultItemName,
         plannedWeightKg: 5000,
       },
     ]);
   };
 
-  const handleRemoveBay = (index: number) => {
-    if (bays.length <= 1) return;
-    setBays(prev =>
-      prev
-        .filter((_, i) => i !== index)
-        .map((b, idx) => ({
-          ...b,
-          bayNumber: idx + 1,
-          bayName: b.bayName.startsWith('Bay ') ? `Bay ${idx + 1} ${b.bayName.slice(5)}` : b.bayName,
-        }))
-    );
+  const handleRemoveItem = (index: number) => {
+    if (plannedItems.length <= 1) return;
+    setPlannedItems(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleUpdateBay = (index: number, updates: Partial<BayDraft>) => {
-    setBays(prev => {
+  const handleUpdateItem = (index: number, updates: Partial<PlannedItemDraft>) => {
+    setPlannedItems(prev => {
       const copy = [...prev];
       copy[index] = { ...copy[index], ...updates };
       return copy;
     });
   };
 
-  const totalPlannedWeight = bays.reduce((sum, b) => sum + (Number(b.plannedWeightKg) || 0), 0);
+  const totalPlannedWeight = plannedItems.reduce((sum, b) => sum + (Number(b.plannedWeightKg) || 0), 0);
+  const distinctBaysCount = new Set(plannedItems.map(i => i.bayNumber)).size;
 
   // ── Complete Planning & Generate Delivery Order ─────────────────────────
   const handleGenerateDO = () => {
@@ -225,8 +233,8 @@ export const PlanningPage: React.FC<PlanningPageProps> = ({
       setErrorMsg('Please assign a Warehouse Supervisor.');
       return;
     }
-    if (bays.length === 0 || totalPlannedWeight <= 0) {
-      setErrorMsg('Please configure at least one bay with planned weight.');
+    if (plannedItems.length === 0 || totalPlannedWeight <= 0) {
+      setErrorMsg('Please configure at least one item with planned weight.');
       return;
     }
 
@@ -234,15 +242,16 @@ export const PlanningPage: React.FC<PlanningPageProps> = ({
     const finalPlanningSecs = planningSeconds;
     const newDoNo = nextDONo();
 
-    const plannedItems: PlannedBayItem[] = bays.map((b, idx) => ({
-      id: `item-${idx + 1}`,
-      bayNumber: b.bayNumber,
-      bayName: b.bayName,
-      handlerName: b.handlerName,
-      itemCode: b.itemCode,
-      itemName: b.itemName,
-      plannedWeightKg: Number(b.plannedWeightKg),
-      notes: b.notes,
+    const formattedItems: PlannedBayItem[] = plannedItems.map((item, idx) => ({
+      id: item.id || `item-${idx + 1}`,
+      bayNumber: item.bayNumber,
+      bayName: item.bayName,
+      handlerName: item.handlerName,
+      handlerId: item.handlerId,
+      itemCode: item.itemCode,
+      itemName: item.itemName,
+      plannedWeightKg: Number(item.plannedWeightKg),
+      notes: item.notes,
     }));
 
     const newDO: DeliveryOrderPlan = {
@@ -260,10 +269,11 @@ export const PlanningPage: React.FC<PlanningPageProps> = ({
       plannerId: planners.find(p => p.name === plannerName)?.id,
       supervisorName,
       supervisorId: supervisors.find(s => s.name === supervisorName)?.id,
-      baysCount: bays.length,
-      items: plannedItems,
+      baysCount: distinctBaysCount,
+      items: formattedItems,
       totalPlannedWeightKg: totalPlannedWeight,
-      currentLocation: `Waiting for ${bays[0]?.bayName || 'Bay 1'} / Scale #1`,
+      weightToleranceKg: Number(weightToleranceKg) || 50,
+      currentLocation: `Waiting for ${plannedItems[0]?.bayName || 'Bay 1'} / Scale #1`,
       checkingStatus: 'pending',
       inTime: currentVehicle.entryTime,
       planningStartTime,
@@ -752,142 +762,214 @@ export const PlanningPage: React.FC<PlanningPageProps> = ({
               </p>
             </div>
 
-            <div className="flex items-end justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
-              <div>
-                <p className="text-xs font-bold text-slate-700 uppercase">Configured Bays</p>
-                <p className="text-2xl font-black text-blue-700 font-mono mt-0.5">
-                  {bays.length} <span className="text-xs font-medium text-slate-500">Bay(s) Assigned</span>
-                </p>
+            {/* Configurable Weight Tolerance (Requirement 6) */}
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1 flex items-center justify-between">
+                <span>Weight Tolerance (kg) *</span>
+                <span className="text-[10px] text-amber-700 font-mono font-bold bg-amber-100/80 px-1.5 py-0.5 rounded">
+                  Configured for D.O
+                </span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-mono font-bold">±</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="5000"
+                  step="5"
+                  value={weightToleranceKg}
+                  onChange={e => setWeightToleranceKg(Math.max(0, Number(e.target.value)))}
+                  className="w-full pl-7 pr-8 py-2 bg-white border border-slate-300 rounded-lg text-sm font-mono font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-mono">kg</span>
               </div>
-              <button
-                type="button"
-                onClick={handleAddBay}
-                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Another Bay
-              </button>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Allowable variance during checking and exit gate verification.
+              </p>
             </div>
           </div>
 
-          {/* Bay Configuration Table */}
+          {/* Bay & Item Loading Allocation (Requirement 6: select bay from list, allow multiple items per bay) */}
           <div>
-            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-              Bay Loading Allocation & Handler In-Charge Details
-            </h4>
-
-            <div className="space-y-3">
-              {bays.map((bay, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 border border-slate-200 rounded-xl bg-slate-50/50 hover:bg-slate-50 transition grid grid-cols-1 md:grid-cols-12 gap-3 items-center"
-                >
-                  {/* Bay Number & Name */}
-                  <div className="md:col-span-3">
-                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
-                      Bay Location
-                    </label>
-                    <input
-                      type="text"
-                      value={bay.bayName}
-                      onChange={e => handleUpdateBay(idx, { bayName: e.target.value })}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-semibold focus:ring-1 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
-
-                  {/* Bay Handler */}
-                  <div className="md:col-span-3">
-                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
-                      Handler In-Charge (Loading / Unloading)
-                    </label>
-                    <select
-                      value={bay.handlerName}
-                      onChange={e => handleUpdateBay(idx, { handlerName: e.target.value })}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none"
-                    >
-                      {handlers.map(h => (
-                        <option key={h.id} value={h.name}>
-                          {h.name} ({h.phone})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Material / Item */}
-                  <div className="md:col-span-3">
-                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
-                      Item to Load
-                    </label>
-                    <input
-                      type="text"
-                      list={`items-list-${idx}`}
-                      value={bay.itemName}
-                      onChange={e => {
-                        const val = e.target.value;
-                        const match = products.find(p => p.name === val);
-                        handleUpdateBay(idx, {
-                          itemName: val,
-                          itemCode: match ? match.code : bay.itemCode,
-                        });
-                      }}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none"
-                    />
-                    <datalist id={`items-list-${idx}`}>
-                      {products.map(p => (
-                        <option key={p.id} value={p.name} />
-                      ))}
-                    </datalist>
-                  </div>
-
-                  {/* Planned Weight in Kg */}
-                  <div className="md:col-span-2">
-                    <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
-                      Planned Wgt (kg)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={bay.plannedWeightKg}
-                        onChange={e =>
-                          handleUpdateBay(idx, { plannedWeightKg: Number(e.target.value) })
-                        }
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-mono font-bold text-slate-900 focus:ring-1 focus:ring-blue-500 outline-none"
-                      />
-                      <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-mono">
-                        kg
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Remove Button */}
-                  <div className="md:col-span-1 text-right flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveBay(idx)}
-                      disabled={bays.length <= 1}
-                      title="Remove bay"
-                      className="p-1.5 text-slate-400 hover:text-red-600 disabled:opacity-30 transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Total Planned Summary Bar */}
-            <div className="mt-4 p-4 bg-blue-50/60 border border-blue-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
               <div>
-                <p className="text-xs text-blue-900 font-medium">
-                  Total Planned Cargo Weight across {bays.length} Bay(s):
-                </p>
-                <p className="text-2xl font-mono font-black text-blue-900">
-                  {totalPlannedWeight.toLocaleString()} <span className="text-sm font-semibold">kg</span>
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                  <span>Planned Items & Bay Loading Allocation</span>
+                  <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                    {plannedItems.length} Item(s) across {distinctBaysCount} Bay(s)
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Select a bay from the configured master list for each item. Multiple items can be assigned to the same bay.
                 </p>
               </div>
 
-              <div className="text-right text-xs text-slate-500">
-                <p>Initial Vehicle Tare Weight: <strong>{currentVehicle.entryWeight.toLocaleString()} kg</strong></p>
+              {/* Add Item to Load (Replaces Add Another Bay - Requirement 6) */}
+              <button
+                type="button"
+                onClick={() => handleAddItem()}
+                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow-sm self-start sm:self-auto"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Item to Load
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {plannedItems.map((item, idx) => {
+                const currentBayMaster = availableBays.find(b => b.bayNumber === item.bayNumber);
+                const bayAvailableItems = currentBayMaster?.items || [];
+
+                return (
+                  <div
+                    key={item.id || idx}
+                    className="p-4 border border-slate-200 rounded-xl bg-slate-50/60 hover:bg-slate-50 transition grid grid-cols-1 md:grid-cols-12 gap-3 items-center"
+                  >
+                    {/* Bay Selection from List of Bays (Requirement 6) */}
+                    <div className="md:col-span-4">
+                      <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
+                        Select Bay (From Bay Master) *
+                      </label>
+                      <select
+                        value={item.bayNumber}
+                        onChange={e => {
+                          const chosenBay = availableBays.find(b => b.bayNumber === Number(e.target.value));
+                          if (chosenBay) {
+                            handleUpdateItem(idx, {
+                              bayNumber: chosenBay.bayNumber,
+                              bayName: chosenBay.bayName,
+                              handlerName: chosenBay.handlerName,
+                              handlerId: chosenBay.handlerId,
+                              itemName: chosenBay.items[0] || item.itemName,
+                            });
+                          }
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-900 focus:ring-1 focus:ring-blue-500 outline-none"
+                      >
+                        {availableBays.map(b => (
+                          <option key={b.id} value={b.bayNumber}>
+                            Bay #{b.bayNumber}: {b.bayName} ({b.handlerName})
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-[10px] text-slate-400 mt-0.5 block">
+                        Handler in-charge: <strong className="text-slate-700">{item.handlerName}</strong>
+                      </span>
+                    </div>
+
+                    {/* Material / Item to Load */}
+                    <div className="md:col-span-4">
+                      <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
+                        Item to Load at this Bay *
+                      </label>
+                      <input
+                        type="text"
+                        list={`items-list-${idx}`}
+                        value={item.itemName}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const match = products.find(p => p.name === val);
+                          handleUpdateItem(idx, {
+                            itemName: val,
+                            itemCode: match ? match.code : item.itemCode,
+                          });
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                      <datalist id={`items-list-${idx}`}>
+                        {products.map(p => (
+                          <option key={p.id} value={p.name} />
+                        ))}
+                      </datalist>
+
+                      {/* Quick pick chips from items available in selected bay */}
+                      {bayAvailableItems.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <span className="text-[9px] text-slate-400 font-bold uppercase mr-1">In bay:</span>
+                          {bayAvailableItems.map((bayItem, bIdx) => (
+                            <button
+                              key={bIdx}
+                              type="button"
+                              onClick={() => {
+                                const match = products.find(p => p.name === bayItem);
+                                handleUpdateItem(idx, {
+                                  itemName: bayItem,
+                                  itemCode: match ? match.code : item.itemCode,
+                                });
+                              }}
+                              className={cn(
+                                'text-[10px] px-1.5 py-0.5 rounded border transition',
+                                item.itemName === bayItem
+                                  ? 'bg-blue-600 text-white border-blue-600 font-bold'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                              )}
+                            >
+                              {bayItem}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Planned Weight in Kg */}
+                    <div className="md:col-span-3">
+                      <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">
+                        Planned Weight (kg) *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.plannedWeightKg}
+                          onChange={e =>
+                            handleUpdateItem(idx, { plannedWeightKg: Number(e.target.value) })
+                          }
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-mono font-bold text-slate-900 focus:ring-1 focus:ring-blue-500 outline-none"
+                        />
+                        <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-mono">
+                          kg
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Remove Button */}
+                    <div className="md:col-span-1 text-right flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(idx)}
+                        disabled={plannedItems.length <= 1}
+                        title="Remove item"
+                        className="p-1.5 text-slate-400 hover:text-red-600 disabled:opacity-30 transition rounded hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Total Planned Summary Bar with Weight Tolerance */}
+            <div className="mt-4 p-4 bg-gradient-to-r from-blue-50/80 via-indigo-50/70 to-slate-50 border border-blue-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-xs text-blue-900 font-medium">
+                  Total Planned Cargo Weight across {plannedItems.length} Item(s) in {distinctBaysCount} Bay(s):
+                </p>
+                <div className="flex items-baseline gap-3 mt-0.5">
+                  <p className="text-2xl font-mono font-black text-blue-900">
+                    {totalPlannedWeight.toLocaleString()} <span className="text-sm font-semibold">kg</span>
+                  </p>
+                  <span className="text-xs font-mono font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded">
+                    Tolerance: ±{weightToleranceKg} kg
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-right text-xs text-slate-600 space-y-0.5">
+                <p>Initial Tare Weight: <strong>{currentVehicle.entryWeight.toLocaleString()} kg</strong></p>
                 <p>Estimated Gross Post-Loading: <strong>{(currentVehicle.entryWeight + totalPlannedWeight).toLocaleString()} kg</strong></p>
+                <p className="text-[11px] text-slate-500">
+                  Acceptable Range: [{(totalPlannedWeight - weightToleranceKg).toLocaleString()} .. {(totalPlannedWeight + weightToleranceKg).toLocaleString()}] kg
+                </p>
               </div>
             </div>
           </div>

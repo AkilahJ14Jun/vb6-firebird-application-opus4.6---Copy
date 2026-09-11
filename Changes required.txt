@@ -3,13 +3,26 @@ Understand the application and this code base by going through the content in 'g
 Following changes are required in this application.
 
 
-Once an entry slip is generated on vehicle entry, it is then used for planning the entire series of loading or unloading tasks. 
-The things that get confirmed during this planning stage are the number of items and the respective weight required to be loaded or unloaded and the bay from which each item has to be loaded from or unloaded to. 
-The supervisor who will be assigned for that vehicle from the time it entered the warehouse till all the items are loaded or unloaded. 
-Once this is done the status for that vehicle is marked as planned and a Delivery Order (D.O) number is generated.
-At each stage the user of the application should be able to select the D.O for the vehicle from an existing list of DOs which is not yet complete.
-Before the D.O generation the status is marked as unplanned. At any stage an user should be able to see how much of loading/unloading activity is pending and currently for a given delivery order number. The user should also be able to know where a particular vehicle is located at any point in time within the warehouse. Each bay will have a handler person associated.Once all the items from relevant bays are loaded, then another person does the checking. Once checked and verified that all items and required weight is loaded , the status is marked as 'Checked'. After that the vehicle goes to the billing section within the warehouse. Once the bill amount is settled or payment made according the payment and agreed credit limit terms, then the vehicle is let to exit from the warehouse. While checking if there is any discrepancy then person checking will guide the vehicle to the particular bay/bays where it has to go to again for required loading/unloading activity, as directed by the checking person. Change the customer, supplier,driver, user names to appear like Indian names and customer credit limit in 'Customers' page to show in Indian Rupees. The settings page should allow the user to configure IP based cameras also for the weigh bridge data capturing activity.
-The 'Dashboard' page which displays the Open tickets currently should display only the items awaiting to be loaded. 
+In 'Planning & DO' page, the user should be able to select a bay from a list of bays. This is to allow multiple items to be loaded for the same bay for a particular D.O. So 'Add Another Bay' functionality not required in this page. This page should allow some wieght tolerance in terms of Kgs to be configured for each D.O. This tolerance weight data also has to be captured at this stage.
+Another page in 'Administration' section to be added for adding bays to a separate master table which will have bay number, bay name, items avaliable in that bay and handler assigned for that bay.
+In Multi-Weighment page , the user should be able to select a particular D.O or vehicle from a list. 
+In 'Loading' page the user should be able to capture weight via weighing scale or manual entry mode also.
+This page should allow the user to select from a list of vehicle number or D.O number for the loading activity.
+This page should allow the user to select bay and the item being loaded based on data from bay master table. Time on entry into and exit from each bay after loading activity should be captured automatically.
+Similaryly in 'Unloading' page the user should be able to select from a list of vehicle number or D.O number for the unloading activity. Here also time has to be captured in each bay for the unloading activity.
+This 'Unloading' page the user should be able to select each bay and item being loaded.
+Both on 'Loading' page and 'Unloading' page the 'Finish Loading' / 'Finish Unloading' checkbox should be visible for the user to mark the completion of all tasks for a given D.O
+Once loading or unloading activity is marked as finished then it has to go the checking section.
+A separate page is required to perform this checking activity.
+The person performing the checking will check the number of items and the quantity against what was planned in the D.O initially.
+In 'Multi-wieghment' page is now only meant for seeing the overall status for a given D.O or vehicle and no data entry takes place here.
+In this page The 'Billing Section' is not required.
+A separate page is required for capturing data at the Exit Gate.
+At the Exit Gate the overall weight along with all the items loaded /unloaded is checked against the total planned weight at the planning stage while preparing the D.O. along with the permitted tolerance limits. The person at the Exit gate can still decide whether to allow the overall weight is beyond this limit also.
+ 
+ 
+
+
 
 
 

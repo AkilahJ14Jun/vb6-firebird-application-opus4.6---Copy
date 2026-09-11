@@ -181,6 +181,12 @@ export const DeliveryOrderModal: React.FC<DeliveryOrderModalProps> = ({ order, o
                     {order.totalPlannedWeightKg.toLocaleString()} kg
                   </span>
                 </p>
+                <p className="text-slate-700">
+                  <span className="text-slate-500 w-28 inline-block">Weight Tolerance:</span>
+                  <span className="font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                    ±{order.weightToleranceKg ?? 50} kg
+                  </span>
+                </p>
               </div>
             </div>
           </div>

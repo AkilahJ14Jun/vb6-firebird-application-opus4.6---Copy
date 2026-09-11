@@ -1,431 +1,686 @@
 /**
  * ============================================================================
- * WEIGH-IN PAGE
+ * LOADING OPERATIONS PAGE
  * ============================================================================
- * Replaces: frmWeighIn from VB6
- *
- * ORIGINAL VB6 BEHAVIOR:
- *   1. Operator selects Product from combo box
- *   2. Operator selects Customer/Supplier
- *   3. Operator enters/selects Vehicle plate number
- *   4. Scale weight is read from MSComm serial port (modSerial.ReadWeight)
- *   5. Weight is displayed in a large label (lblWeight)
- *   6. Operator clicks "Save" button
- *   7. VB6 calls SP_GET_NEXT_TICKET_NO to get sequence
- *   8. INSERT INTO TICKETS with gross weight
- *   9. Ticket prints via modPrint.PrintTicket
- *
- * MODERN IMPLEMENTATION:
- *   - Same workflow but web-based with better UX
- *   - Live weight display via simulated WebSocket stream
- *   - Form validation with clear error messages
- *   - Auto-populated vehicle tare weight
+ * Fulfills Requirements 9, 10, 11, 14, 15 from Changes required.txt:
+ * - Line 9: "In 'Loading' page the user should be able to capture weight
+ *           via weighing scale or manual entry mode also."
+ * - Line 10: "This page should allow the user to select from a list of
+ *            vehicle number or D.O number for the loading activity."
+ * - Line 11: "This page should allow the user to select bay and the item
+ *            being loaded based on data from bay master table. Time on entry
+ *            into and exit from each bay after loading activity should be
+ *            captured automatically."
+ * - Line 14: "Both on 'Loading' page and 'Unloading' page the 'Finish Loading'
+ *            / 'Finish Unloading' checkbox should be visible for the user to
+ *            mark the completion of all tasks for a given D.O"
+ * - Line 15: "Once loading or unloading activity is marked as finished then
+ *            it has to go the checking section."
  * ============================================================================
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import type { Product, Customer, Supplier, Vehicle, Ticket } from '@/types';
-import { nextId, nextTicketNo, formatNow } from '@/store/appStore';
-import { Scale, Save, RotateCcw, Zap } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import type {
+  Product, Customer, Supplier, Vehicle, Ticket,
+  DeliveryOrderPlan, BayMaster
+} from '@/types';
+import { formatTime12, formatDuration, formatNow, sampleBays } from '@/store/appStore';
 import { cn } from '@/utils/cn';
+import {
+  Scale, ArrowDownToLine, CheckCircle2, Clock, Truck, Layers,
+  Check, AlertTriangle, ArrowRight, UserCheck, Package,
+  RotateCcw, MapPin, Search, Plus
+} from 'lucide-react';
 
 interface WeighInPageProps {
   products: Product[];
   customers: Customer[];
   suppliers: Supplier[];
   vehicles: Vehicle[];
+  deliveryOrders?: DeliveryOrderPlan[];
+  bays?: BayMaster[];
   operatorId: number;
   operatorName: string;
-  onSave: (ticket: Ticket) => void;
+  onSave?: (ticket: Ticket) => void;
+  onUpdateDeliveryOrder?: (order: DeliveryOrderPlan) => void;
+  onNavigateToChecking?: (deliveryOrderId: number) => void;
 }
 
 export function WeighInPage({
-  products, customers, suppliers, vehicles,
-  operatorId, operatorName, onSave
+  products: _products,
+  customers: _customers,
+  suppliers: _suppliers,
+  vehicles: _vehicles,
+  deliveryOrders = [],
+  bays = sampleBays,
+  operatorId: _operatorId,
+  operatorName: _operatorName,
+  onSave: _onSave,
+  onUpdateDeliveryOrder,
+  onNavigateToChecking,
 }: WeighInPageProps) {
-  /* ── Form State ──────────────────────────────────────────────────────── */
-  const [ticketType, setTicketType] = useState<'purchase' | 'sale'>('purchase');
-  const [productId, setProductId] = useState('');
-  const [customerId, setCustomerId] = useState('');
-  const [supplierId, setSupplierId] = useState('');
-  const [vehicleId, setVehicleId] = useState('');
-  const [notes, setNotes] = useState('');
-  const [saved, setSaved] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const availableBays = bays && bays.length > 0 ? bays : sampleBays;
 
-  /* ── Simulated Live Weight from Scale ──────────────────────────────── */
-  /**
-   * In the original VB6, weight was read from MSComm control:
-   *   MSComm1.Output = "W" + vbCr  ' Send command to scale
-   *   weight = Val(MSComm1.Input)    ' Read response
-   *
-   * In production, this would use:
-   *   - Web Serial API (browser): navigator.serial.requestPort()
-   *   - Socket.IO stream from Node.js serialport library
-   *
-   * For this demo, we simulate fluctuating weight readings.
-   */
-  const [liveWeight, setLiveWeight] = useState(0);
-  const [scaleStable, setScaleStable] = useState(false);
-  const [scaleConnected] = useState(true);
+  // Filter DOs for loading operations (not exited)
+  const activeDOs = deliveryOrders.filter(d => d.status !== 'exited');
+
+  // Requirement 10: Select from list of vehicle number or D.O number
+  const [selectedDOId, setSelectedDOId] = useState<number | null>(() => {
+    return activeDOs[0]?.id || null;
+  });
+  const [searchFilter, setSearchFilter] = useState('');
+
+  const currentDO = deliveryOrders.find(d => d.id === selectedDOId);
+
+  // Requirement 11: Select bay and item being loaded based on Bay Master
+  const [selectedBayNumber, setSelectedBayNumber] = useState<number>(() => {
+    return currentDO?.items[0]?.bayNumber || availableBays[0]?.bayNumber || 1;
+  });
+
+  const activeBayMaster = availableBays.find(b => b.bayNumber === selectedBayNumber) || availableBays[0];
+
+  const [selectedItemName, setSelectedItemName] = useState<string>(() => {
+    return activeBayMaster?.items[0] || 'River Sand';
+  });
+
+  // When selected DO changes, synchronize bay & item selection
+  useEffect(() => {
+    if (currentDO && currentDO.items.length > 0) {
+      const firstBay = currentDO.items[0].bayNumber;
+      setSelectedBayNumber(firstBay);
+      const bayData = availableBays.find(b => b.bayNumber === firstBay);
+      setSelectedItemName(currentDO.items[0].itemName || bayData?.items[0] || 'River Sand');
+    }
+  }, [currentDO?.id]);
+
+  // When bay changes, default item to first available in bay
+  const handleSelectBay = (bayNum: number) => {
+    setSelectedBayNumber(bayNum);
+    const bayData = availableBays.find(b => b.bayNumber === bayNum);
+    if (bayData && bayData.items.length > 0) {
+      // If the DO already planned an item for this bay, pick it
+      const plannedForThisBay = currentDO?.items.find(i => i.bayNumber === bayNum);
+      setSelectedItemName(plannedForThisBay?.itemName || bayData.items[0]);
+    }
+  };
+
+  // Requirement 9: Capture weight via weighing scale or manual entry mode
+  const [captureMode, setCaptureMode] = useState<'scale' | 'manual'>('scale');
+  const [liveScaleWeight, setLiveScaleWeight] = useState(6500);
+  const [capturedWeight, setCapturedWeight] = useState<number | null>(null);
+  const [manualWeightInput, setManualWeightInput] = useState<string>('6500');
 
   useEffect(() => {
-    const targetWeight = 15000 + Math.random() * 25000;
-    let currentWeight = 0;
     const interval = setInterval(() => {
-      if (currentWeight < targetWeight) {
-        currentWeight += targetWeight / 20 + (Math.random() - 0.5) * 500;
-        if (currentWeight > targetWeight) currentWeight = targetWeight;
-        setScaleStable(false);
-      } else {
-        // Add small fluctuations to simulate real scale behavior
-        currentWeight = targetWeight + (Math.random() - 0.5) * 20;
-        setScaleStable(true);
-      }
-      setLiveWeight(Math.round(currentWeight));
-    }, 200);
-
+      setLiveScaleWeight(prev => Math.round(prev + (Math.random() - 0.5) * 15));
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  /* ── Capture Weight (freeze the current reading) ─────────────────── */
-  const [capturedWeight, setCapturedWeight] = useState<number | null>(null);
+  const handleCaptureFromScale = useCallback(() => {
+    setCapturedWeight(liveScaleWeight);
+    setManualWeightInput(liveScaleWeight.toString());
+  }, [liveScaleWeight]);
 
-  const captureWeight = useCallback(() => {
-    setCapturedWeight(liveWeight);
-  }, [liveWeight]);
-
-  /* ── Form Validation ─────────────────────────────────────────────── */
-  const validate = (): boolean => {
-    const errs: Record<string, string> = {};
-    if (!productId) errs.product = 'Please select a product';
-    if (ticketType === 'sale' && !customerId) errs.customer = 'Please select a customer for sales';
-    if (ticketType === 'purchase' && !supplierId) errs.supplier = 'Please select a supplier for purchases';
-    if (!vehicleId) errs.vehicle = 'Please select a vehicle';
-    if (!capturedWeight || capturedWeight <= 0) errs.weight = 'Please capture weight from scale';
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
+  const handleManualWeightChange = (val: string) => {
+    setManualWeightInput(val);
+    const num = Number(val);
+    if (!isNaN(num) && num >= 0) {
+      setCapturedWeight(num);
+    }
   };
 
-  /* ── Save Ticket (weigh-in) ──────────────────────────────────────── */
-  /**
-   * Creates a new ticket with status='open' and grossWeight set.
-   * This mirrors the VB6 INSERT INTO TICKETS statement in frmWeighIn.cmdSave_Click
-   */
-  const handleSave = () => {
-    if (!validate()) return;
+  // Requirement 11: Automated Entry & Exit Time in each Bay
+  const [isInsideBay, setIsInsideBay] = useState(false);
+  const [bayEntryTime, setBayEntryTime] = useState<string>('');
+  const [bayDurationSecs, setBayDurationSecs] = useState(0);
 
-    const product = products.find(p => p.id === Number(productId))!;
-    const customer = ticketType === 'sale' ? customers.find(c => c.id === Number(customerId)) : null;
-    const supplier = ticketType === 'purchase' ? suppliers.find(s => s.id === Number(supplierId)) : null;
-    const vehicle = vehicles.find(v => v.id === Number(vehicleId))!;
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    if (isInsideBay) {
+      timer = setInterval(() => {
+        setBayDurationSecs(prev => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isInsideBay]);
 
-    const ticket: Ticket = {
-      id: nextId(),
-      ticketNo: nextTicketNo(),
-      type: ticketType,
-      status: 'open',
-      productId: product.id,
-      productName: product.name,
-      customerId: customer?.id ?? null,
-      customerName: customer?.name ?? null,
-      supplierId: supplier?.id ?? null,
-      supplierName: supplier?.name ?? null,
-      vehicleId: vehicle.id,
-      vehiclePlateNo: vehicle.plateNo,
-      grossWeight: capturedWeight!,
-      tareWeight: null,
-      netWeight: null,
-      weighInAt: formatNow(),
-      weighOutAt: null,
-      unitPrice: product.unitPrice,
-      totalAmount: null,
-      notes,
-      voidReason: null,
-      operatorId,
-      operatorName,
-      createdAt: formatNow(),
+  // Record Bay Entry
+  const handleRecordBayEntry = () => {
+    const entryNow = formatTime12();
+    setBayEntryTime(entryNow);
+    setBayDurationSecs(0);
+    setIsInsideBay(true);
+  };
+
+  // Record Bay Exit & Loaded Weight
+  const handleRecordBayExit = () => {
+    if (!currentDO) return;
+    const exitNow = formatTime12();
+    const finalWeight = capturedWeight ?? Number(manualWeightInput) ?? 5000;
+
+    // Update the item in D.O plan
+    const updatedItems = currentDO.items.map(item => {
+      if (item.bayNumber === selectedBayNumber && item.itemName === selectedItemName) {
+        return {
+          ...item,
+          actualLoadedWeightKg: finalWeight,
+          pendingWeightKg: Math.max(0, item.plannedWeightKg - finalWeight),
+          notes: `Loaded at ${activeBayMaster?.bayName} (Entry: ${bayEntryTime}, Exit: ${exitNow})`,
+        };
+      }
+      return item;
+    });
+
+    const updatedDO: DeliveryOrderPlan = {
+      ...currentDO,
+      items: updatedItems,
+      currentLocation: `Departed ${activeBayMaster?.bayName} at ${exitNow}`,
+      status: 'in_progress',
     };
 
-    onSave(ticket);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
-
-    // Reset form
-    setProductId('');
-    setCustomerId('');
-    setSupplierId('');
-    setVehicleId('');
-    setNotes('');
-    setCapturedWeight(null);
+    onUpdateDeliveryOrder?.(updatedDO);
+    setIsInsideBay(false);
+    alert(`✓ Bay exit recorded at ${exitNow}. Loaded ${finalWeight.toLocaleString()} kg of ${selectedItemName}.`);
   };
 
-  const activeProducts = products.filter(p => p.isActive);
-  const activeCustomers = customers.filter(c => c.isActive);
-  const activeSuppliers = suppliers.filter(s => s.isActive);
-  const activeVehicles = vehicles.filter(v => v.isActive);
+  // Requirement 14 & 15: Finish Loading Checkbox
+  const [finishLoadingChecked, setFinishLoadingChecked] = useState(false);
+  const [loadingCompletedSuccess, setLoadingCompletedSuccess] = useState(false);
 
-  const selectedVehicleObj = activeVehicles.find(v => v.id === Number(vehicleId));
-  const prevWeight = selectedVehicleObj?.tareWeight || 0;
-  const currentGross = capturedWeight !== null ? capturedWeight : liveWeight;
-  const weightAdded = Math.max(0, currentGross - prevWeight);
+  const handleCompleteFinishLoading = () => {
+    if (!currentDO) return;
+    if (!finishLoadingChecked) {
+      alert('Please check the "Finish Loading" checkbox to confirm completion of all tasks.');
+      return;
+    }
+
+    const updatedDO: DeliveryOrderPlan = {
+      ...currentDO,
+      status: 'awaiting_check',
+      checkingStatus: 'pending',
+      currentLocation: 'At Checking Area',
+    };
+
+    onUpdateDeliveryOrder?.(updatedDO);
+    setLoadingCompletedSuccess(true);
+  };
+
+  const filteredDOs = activeDOs.filter(d => {
+    const q = searchFilter.toLowerCase();
+    return (
+      d.vehicleNumber.toLowerCase().includes(q) ||
+      d.doNumber.toLowerCase().includes(q) ||
+      d.customerName.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="space-y-6">
       {/* ── Page Header ────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-slate-800">Loading Operations</h2>
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <ArrowDownToLine className="w-6 h-6 text-emerald-600" />
+              Loading Operations
+            </h2>
             <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
-              Formerly Weigh In
+              Bay Loading Activity
             </span>
           </div>
           <p className="text-sm text-slate-500 mt-0.5">
-            Before loading activity: View previous weight, weight added in bay, and gross weight
+            Select vehicle/D.O, capture weight via scale or manual mode, track bay entry/exit times, and mark loading finish (Requirements 9, 10, 11, 14, 15).
           </p>
         </div>
-        {saved && (
-          <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg text-sm font-medium animate-pulse">
-            ✓ Loading record saved successfully!
+
+        {currentDO && (
+          <div className="flex items-center gap-2 font-mono text-xs bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs">
+            <span className="text-slate-400">Tolerance:</span>
+            <span className="font-bold text-amber-700">±{currentDO.weightToleranceKg ?? 50} kg</span>
           </div>
         )}
       </div>
 
-      {/* ── Before Loading Activity Display (Requirement 6) ────────── */}
-      <div className="bg-gradient-to-r from-blue-50 via-slate-50 to-emerald-50 border border-blue-200 rounded-xl p-4 shadow-sm">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
-            <Scale className="w-4 h-4 text-blue-600" />
-            Before Loading Activity — Weight Calculation & Preview
-          </p>
-          <span className="text-[11px] text-slate-500 font-medium">
-            Vehicle: {selectedVehicleObj ? selectedVehicleObj.plateNo : 'Select Vehicle below'}
-          </span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
-          <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-xs">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Previous Weight (Tare)
-            </p>
-            <p className="text-xl font-mono font-black text-slate-800 mt-1">
-              {prevWeight.toLocaleString()} kg
-            </p>
-            <p className="text-[10px] text-slate-400">Empty vehicle weight</p>
-          </div>
-
-          <div className="p-3 bg-white rounded-lg border border-blue-200 shadow-xs">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600">
-              Weight Added in Bay
-            </p>
-            <p className="text-xl font-mono font-black text-blue-700 mt-1">
-              +{weightAdded.toLocaleString()} kg
-            </p>
-            <p className="text-[10px] text-blue-500">Material loaded in bay</p>
-          </div>
-
-          <div className="p-3 bg-white rounded-lg border border-emerald-200 shadow-xs">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
-              Gross Weight
-            </p>
-            <p className="text-xl font-mono font-black text-emerald-800 mt-1">
-              {currentGross.toLocaleString()} kg
-            </p>
-            <p className="text-[10px] text-emerald-500">Previous + Weight Added</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* ── Live Scale Display ──────────────────────────────────── */}
-        <div className="bg-white rounded-xl shadow border border-slate-200 p-6">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <Scale className="w-4 h-4 text-emerald-500" />
-            Live Scale Reading
-          </h3>
-
-          {/* Scale status indicator */}
-          <div className="flex items-center gap-2 mb-4">
-            <span className={cn(
-              'w-2 h-2 rounded-full',
-              scaleConnected ? (scaleStable ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse') : 'bg-red-500'
-            )} />
-            <span className="text-xs text-slate-500">
-              {scaleConnected ? (scaleStable ? 'Stable' : 'Stabilizing...') : 'Disconnected'}
+      {loadingCompletedSuccess && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-sm font-semibold flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+            <span>
+              ✓ Loading finished for D.O {currentDO?.doNumber}! The vehicle has been transferred to the <strong>Checking Section</strong>.
             </span>
           </div>
-
-          {/* Weight display - mirrors the large lblWeight in VB6 */}
-          <div className={cn(
-            'bg-slate-900 rounded-xl p-6 text-center mb-4',
-            scaleStable ? 'ring-2 ring-emerald-500' : ''
-          )}>
-            <p className="text-4xl font-mono font-bold text-emerald-400 tracking-wider">
-              {liveWeight.toLocaleString()}
-            </p>
-            <p className="text-slate-500 text-xs mt-1">kg</p>
-          </div>
-
-          {/* Capture button - like clicking "Read" in VB6 */}
-          <button
-            onClick={captureWeight}
-            className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold rounded-lg hover:from-emerald-600 hover:to-teal-700 transition-all flex items-center justify-center gap-2"
-          >
-            <Zap className="w-4 h-4" /> Capture Loading Weight
-          </button>
-
-          {/* Captured weight display */}
-          {capturedWeight !== null && (
-            <div className="mt-4 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
-              <p className="text-xs text-emerald-600 font-medium">Captured Gross Weight</p>
-              <p className="text-2xl font-bold text-emerald-800 font-mono">
-                {capturedWeight.toLocaleString()} kg
-              </p>
-            </div>
+          {onNavigateToChecking && currentDO && (
+            <button
+              type="button"
+              onClick={() => onNavigateToChecking(currentDO.id)}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm"
+            >
+              Go to Checking Section →
+            </button>
           )}
-          {errors.weight && <p className="text-xs text-red-500 mt-2">{errors.weight}</p>}
         </div>
+      )}
 
-        {/* ── Ticket Form ────────────────────────────────────────── */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow border border-slate-200 p-6">
-          <h3 className="font-bold text-slate-800 mb-4">Loading Ticket Details</h3>
-
-          <div className="space-y-4">
-            {/* Transaction Type */}
+      {/* ── Main Two-Column Layout ──────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Requirement 10: Left Column - Vehicle or D.O Selection (4 cols) */}
+        <div className="lg:col-span-4 space-y-3">
+          {/* Quick Selection Dropdown Lists for D.O and Vehicle Numbers */}
+          <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-xs space-y-2.5">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Transaction Type *</label>
-              <div className="grid grid-cols-2 gap-3">
-                {(['purchase', 'sale'] as const).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setTicketType(t)}
-                    className={cn(
-                      'py-2.5 px-4 rounded-lg border text-sm font-medium transition text-center',
-                      ticketType === t
-                        ? (t === 'purchase' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-green-50 border-green-300 text-green-700')
-                        : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
-                    )}
-                  >
-                    {t === 'purchase' ? '⬇️ Purchase (Buying In)' : '⬆️ Sale (Selling Out)'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Product Selection - mirrors cboProduct in VB6 */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Product / Commodity *</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                Select by D.O Number
+              </label>
               <select
-                value={productId}
-                onChange={(e) => setProductId(e.target.value)}
-                className={cn(
-                  'w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none',
-                  errors.product ? 'border-red-300' : 'border-slate-300'
-                )}
+                value={selectedDOId || ''}
+                onChange={e => {
+                  const id = Number(e.target.value);
+                  if (id) {
+                    setSelectedDOId(id);
+                    setLoadingCompletedSuccess(false);
+                    setFinishLoadingChecked(false);
+                  }
+                }}
+                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
               >
-                <option value="">— Select Product —</option>
-                {activeProducts.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.code} — {p.name} ({p.unit} @ ₹ {p.unitPrice})
+                <option value="">-- Select D.O Number --</option>
+                {activeDOs.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.doNumber} ({d.vehicleNumber} - {d.customerName})
                   </option>
                 ))}
               </select>
-              {errors.product && <p className="text-xs text-red-500 mt-1">{errors.product}</p>}
             </div>
 
-            {/* Customer/Supplier - mirrors cboCustomer / cboSupplier */}
-            {ticketType === 'sale' ? (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Customer *</label>
-                <select
-                  value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                  className={cn(
-                    'w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none',
-                    errors.customer ? 'border-red-300' : 'border-slate-300'
-                  )}
-                >
-                  <option value="">— Select Customer —</option>
-                  {activeCustomers.map((c) => (
-                    <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
-                  ))}
-                </select>
-                {errors.customer && <p className="text-xs text-red-500 mt-1">{errors.customer}</p>}
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                Select by Vehicle Number
+              </label>
+              <select
+                value={selectedDOId || ''}
+                onChange={e => {
+                  const id = Number(e.target.value);
+                  if (id) {
+                    setSelectedDOId(id);
+                    setLoadingCompletedSuccess(false);
+                    setFinishLoadingChecked(false);
+                  }
+                }}
+                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold uppercase text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+              >
+                <option value="">-- Select Vehicle Number --</option>
+                {activeDOs.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.vehicleNumber} (D.O: {d.doNumber})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Search Box */}
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Or search by Vehicle / D.O / Customer..."
+              value={searchFilter}
+              onChange={e => setSearchFilter(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+            />
+          </div>
+
+          <div className="space-y-2 max-h-[650px] overflow-y-auto pr-1">
+            {filteredDOs.length === 0 ? (
+              <div className="p-6 bg-white border border-slate-200 rounded-xl text-center text-slate-400 text-xs">
+                No active loading orders found.
               </div>
             ) : (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Supplier *</label>
-                <select
-                  value={supplierId}
-                  onChange={(e) => setSupplierId(e.target.value)}
-                  className={cn(
-                    'w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none',
-                    errors.supplier ? 'border-red-300' : 'border-slate-300'
-                  )}
-                >
-                  <option value="">— Select Supplier —</option>
-                  {activeSuppliers.map((s) => (
-                    <option key={s.id} value={s.id}>{s.code} — {s.name}</option>
-                  ))}
-                </select>
-                {errors.supplier && <p className="text-xs text-red-500 mt-1">{errors.supplier}</p>}
-              </div>
+              filteredDOs.map(d => {
+                const isSelected = d.id === selectedDOId;
+                const itemsCount = d.items.length;
+                const loadedCount = d.items.filter(i => (i.actualLoadedWeightKg || 0) > 0).length;
+
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedDOId(d.id);
+                      setLoadingCompletedSuccess(false);
+                      setFinishLoadingChecked(false);
+                    }}
+                    className={cn(
+                      'w-full p-3 rounded-xl border text-left transition-all',
+                      isSelected
+                        ? 'bg-emerald-50/90 border-emerald-500 shadow-md ring-2 ring-emerald-400/30'
+                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 shadow-xs'
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="font-mono text-xs font-bold text-slate-900 uppercase">
+                        {d.vehicleNumber}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                        {loadedCount}/{itemsCount} Loaded
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span className="font-mono text-emerald-700 font-semibold">{d.doNumber}</span>
+                      <span className="font-mono">Planned: {d.totalPlannedWeightKg.toLocaleString()} kg</span>
+                    </div>
+
+                    <p className="text-xs text-slate-700 font-medium truncate mt-1">{d.customerName}</p>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                      Driver: {d.driverName} | Supervisor: {d.supervisorName}
+                    </p>
+                  </button>
+                );
+              })
             )}
-
-            {/* Vehicle - mirrors cboVehicle */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Vehicle *</label>
-              <select
-                value={vehicleId}
-                onChange={(e) => setVehicleId(e.target.value)}
-                className={cn(
-                  'w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none',
-                  errors.vehicle ? 'border-red-300' : 'border-slate-300'
-                )}
-              >
-                <option value="">— Select Vehicle —</option>
-                {activeVehicles.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.plateNo} — {v.driverName} {v.tareWeight ? `(Tare: ${v.tareWeight.toLocaleString()} kg)` : ''}
-                  </option>
-                ))}
-              </select>
-              {errors.vehicle && <p className="text-xs text-red-500 mt-1">{errors.vehicle}</p>}
-            </div>
-
-            {/* Notes */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
-                placeholder="Optional notes..."
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
-              />
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={handleSave}
-                className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold rounded-lg hover:from-emerald-600 hover:to-teal-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
-              >
-                <Save className="w-4 h-4" /> Save Loading Ticket
-              </button>
-              <button
-                onClick={() => {
-                  setProductId(''); setCustomerId(''); setSupplierId('');
-                  setVehicleId(''); setNotes(''); setCapturedWeight(null);
-                  setErrors({});
-                }}
-                className="px-6 py-3 border border-slate-300 text-slate-600 font-medium rounded-lg hover:bg-slate-50 transition flex items-center gap-2"
-              >
-                <RotateCcw className="w-4 h-4" /> Clear
-              </button>
-            </div>
           </div>
+        </div>
+
+        {/* Right Column: Loading Activity Details (8 cols) */}
+        <div className="lg:col-span-8">
+          {currentDO ? (
+            <div className="bg-white rounded-xl shadow border border-slate-200 p-6 space-y-6">
+              {/* Selected Order Summary Card */}
+              <div className="p-4 bg-gradient-to-r from-emerald-50/50 via-slate-50 to-blue-50/40 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-mono text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+                      {currentDO.doNumber}
+                    </span>
+                    <span className="text-xs text-slate-500">Slip #{currentDO.slipNo}</span>
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900 font-mono uppercase flex items-center gap-2">
+                    <Truck className="w-5 h-5 text-emerald-600" />
+                    {currentDO.vehicleNumber}
+                    <span className="text-sm font-sans font-normal text-slate-500 normal-case">
+                      ({currentDO.customerName})
+                    </span>
+                  </h3>
+                </div>
+
+                <div className="text-right text-xs">
+                  <p className="text-slate-500">Location:</p>
+                  <p className="font-bold text-blue-700 text-sm mt-0.5">{currentDO.currentLocation}</p>
+                  <p className="text-[11px] text-slate-400">Supervisor: {currentDO.supervisorName}</p>
+                </div>
+              </div>
+
+              {/* Requirement 11: Select Bay & Item from Bay Master */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-emerald-600" />
+                  Bay & Item Selection (from Bay Master Table)
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Select Bay */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      Loading Bay *
+                    </label>
+                    <select
+                      value={selectedBayNumber}
+                      onChange={e => handleSelectBay(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    >
+                      {availableBays.map(b => (
+                        <option key={b.id} value={b.bayNumber}>
+                          Bay #{b.bayNumber}: {b.bayName}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1">
+                      <UserCheck className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Handler Assigned: <strong>{activeBayMaster?.handlerName}</strong></span>
+                    </div>
+                  </div>
+
+                  {/* Select Item */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                      Item Being Loaded *
+                    </label>
+                    <select
+                      value={selectedItemName}
+                      onChange={e => setSelectedItemName(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    >
+                      {activeBayMaster?.items.map((item, idx) => (
+                        <option key={idx} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Items available in Bay #{activeBayMaster?.bayNumber} based on Bay Master.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Requirement 11: Automated Entry into and Exit from each Bay */}
+              <div className="p-4 bg-gradient-to-r from-blue-50/50 to-indigo-50/40 border border-blue-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-blue-900 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-600" />
+                    Automated Bay Entry & Exit Time Tracking
+                  </h4>
+                  {isInsideBay && (
+                    <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-mono font-bold text-xs flex items-center gap-1 border border-amber-300">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                      Inside Bay: {formatDuration(bayDurationSecs)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  {!isInsideBay ? (
+                    <button
+                      type="button"
+                      onClick={handleRecordBayEntry}
+                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs transition flex items-center justify-center gap-2 shadow-xs"
+                    >
+                      <Clock className="w-4 h-4" />
+                      Record Entry into {activeBayMaster?.bayName}
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white border border-blue-200 rounded-lg text-xs">
+                        <span className="text-[10px] uppercase text-slate-400 block font-bold">Bay Entry Time</span>
+                        <span className="font-mono font-bold text-blue-900">{bayEntryTime}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRecordBayExit}
+                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition flex items-center gap-2 shadow-xs"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        Record Loaded Weight & Exit Bay
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Requirement 9: Weight Capture via Weighing Scale or Manual Entry Mode */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-emerald-600" />
+                    Weight Capture Mode (Scale vs Manual)
+                  </h4>
+
+                  {/* Mode Toggle */}
+                  <div className="flex bg-slate-200 p-0.5 rounded-lg text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setCaptureMode('scale')}
+                      className={cn(
+                        'px-3 py-1 rounded-md transition',
+                        captureMode === 'scale' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      )}
+                    >
+                      Weighing Scale
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCaptureMode('manual')}
+                      className={cn(
+                        'px-3 py-1 rounded-md transition',
+                        captureMode === 'manual' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      )}
+                    >
+                      Manual Entry Mode
+                    </button>
+                  </div>
+                </div>
+
+                {captureMode === 'scale' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                    <div className="p-4 bg-slate-900 text-white rounded-xl flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+                          Scale Port COM3 (Live Weight)
+                        </span>
+                        <p className="text-3xl font-mono font-black text-emerald-400 mt-1">
+                          {liveScaleWeight.toLocaleString()} <span className="text-sm text-slate-400 font-normal">kg</span>
+                        </p>
+                      </div>
+                      <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded text-xs font-bold">
+                        STABLE
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleCaptureFromScale}
+                      className="h-full py-4 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20"
+                    >
+                      <Scale className="w-5 h-5" />
+                      Capture Weight from Scale ({liveScaleWeight.toLocaleString()} kg)
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-white border border-slate-300 rounded-xl space-y-2">
+                    <label className="block text-xs font-bold uppercase text-slate-600">
+                      Manual Loaded Weight Entry (kg) *
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        step="10"
+                        placeholder="Enter weight loaded..."
+                        value={manualWeightInput}
+                        onChange={e => handleManualWeightChange(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-slate-300 rounded-lg font-mono text-base font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleManualWeightChange('8500')}
+                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold"
+                      >
+                        +8,500 kg
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Items & Loaded Records Table */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                  D.O Items & Loaded Weights Progress
+                </h4>
+                <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px]">
+                      <tr>
+                        <th className="py-2.5 px-3">Bay #</th>
+                        <th className="py-2.5 px-3">Bay Name</th>
+                        <th className="py-2.5 px-3">Item Name</th>
+                        <th className="py-2.5 px-3 text-right">Planned (kg)</th>
+                        <th className="py-2.5 px-3 text-right">Actual Loaded (kg)</th>
+                        <th className="py-2.5 px-3">Loading Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {currentDO.items.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-mono font-bold text-emerald-700">#{item.bayNumber}</td>
+                          <td className="py-2 px-3 font-medium text-slate-800">{item.bayName}</td>
+                          <td className="py-2 px-3 font-semibold text-slate-900">{item.itemName}</td>
+                          <td className="py-2 px-3 font-mono text-slate-600 text-right">{item.plannedWeightKg.toLocaleString()} kg</td>
+                          <td className="py-2 px-3 font-mono font-bold text-slate-900 text-right">
+                            {(item.actualLoadedWeightKg || 0) > 0 ? (
+                              <span className="text-emerald-700">{item.actualLoadedWeightKg?.toLocaleString()} kg</span>
+                            ) : (
+                              <span className="text-slate-400 italic">0 kg</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3">
+                            {(item.actualLoadedWeightKg || 0) > 0 ? (
+                              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                ✓ Loaded
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                                Pending
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Requirement 14 & 15: Finish Loading Checkbox & Dispatch to Checking Section */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="finishLoadingCheckbox"
+                    checked={finishLoadingChecked}
+                    onChange={e => setFinishLoadingChecked(e.target.checked)}
+                    className="w-5 h-5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                  />
+                  <label htmlFor="finishLoadingCheckbox" className="text-xs font-bold text-slate-800 cursor-pointer">
+                    Finish Loading — Mark completion of all loading tasks for D.O {currentDO.doNumber}
+                  </label>
+                </div>
+                <p className="text-[11px] text-slate-500 pl-8">
+                  Once loading is marked finished, the vehicle and Delivery Order will automatically transition to the <strong>Checking Section</strong> for physical verification (Requirement 15).
+                </p>
+
+                <div className="pt-1 pl-8">
+                  <button
+                    type="button"
+                    onClick={handleCompleteFinishLoading}
+                    disabled={!finishLoadingChecked}
+                    className="py-3 px-6 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold rounded-xl text-xs transition flex items-center gap-2 shadow-md shadow-emerald-700/20"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Submit & Send to Checking Section
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow border border-slate-200 p-12 text-center text-slate-400 text-sm">
+              Please select a vehicle or D.O from the list to begin loading operations.
+            </div>
+          )}
         </div>
       </div>
     </div>

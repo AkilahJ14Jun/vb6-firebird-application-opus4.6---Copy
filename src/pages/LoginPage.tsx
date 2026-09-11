@@ -166,22 +166,27 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <p className="text-xs text-slate-500 font-medium mb-3">Demo — Quick Login (any password):</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {[
-                { user: 'sysadmin', label: 'System Admin (Support)', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+                // NOTE: 'sysadmin' role has the highest system privileges (Role Level 1).
+                // It is intentionally suppressed from the demo quick login buttons (isSuppressed: true)
+                // so regular demo users only access standard roles, while retaining sysadmin for future/support use.
+                { user: 'sysadmin', label: 'System Admin (Support)', color: 'bg-purple-50 text-purple-700 border-purple-200', isSuppressed: true },
                 { user: 'admin', label: 'Administrator', color: 'bg-red-50 text-red-700 border-red-200' },
                 { user: 'planner1', label: 'Planner', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
                 { user: 'operator1', label: 'Operator', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
                 { user: 'manager1', label: 'Manager', color: 'bg-blue-50 text-blue-700 border-blue-200' },
                 { user: 'viewer1', label: 'Viewer', color: 'bg-slate-50 text-slate-700 border-slate-200' },
-              ].map((demo) => (
-                <button
-                  key={demo.user}
-                  onClick={() => quickLogin(demo.user)}
-                  className={`text-xs font-medium px-2.5 py-2 rounded-lg border transition-all hover:shadow ${demo.color} truncate text-center`}
-                  title={demo.label}
-                >
-                  {demo.label}
-                </button>
-              ))}
+              ]
+                .filter((demo) => !demo.isSuppressed)
+                .map((demo) => (
+                  <button
+                    key={demo.user}
+                    onClick={() => quickLogin(demo.user)}
+                    className={`text-xs font-medium px-2.5 py-2 rounded-lg border transition-all hover:shadow ${demo.color} truncate text-center`}
+                    title={demo.label}
+                  >
+                    {demo.label}
+                  </button>
+                ))}
             </div>
           </div>
         </div>

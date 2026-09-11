@@ -49,7 +49,7 @@ import { useState, useMemo } from 'react';
 import type {
   User, Ticket, AppSettings, PageId,
   VehicleEntry, DeliveryOrderPlan, MultiWeighmentSession,
-  WarehouseEmployee, RoleMaster,
+  WarehouseEmployee, RoleMaster, BayMaster,
 } from './types';
 import {
   sampleUsers, sampleProducts, sampleCustomers,
@@ -58,7 +58,7 @@ import {
   generateAuditLog, generateDailySummary, formatNow,
   initialVehicleEntries, initialDeliveryOrders,
   initialMultiWeighmentSessions, sampleWarehouseEmployees,
-  sampleRoles,
+  sampleRoles, sampleBays,
 } from './store/appStore';
 
 // ── Page Components ─────────────────────────────────────────────────────
@@ -71,6 +71,9 @@ import { PlanningPage } from './pages/PlanningPage';
 import { MultiWeighmentPage } from './pages/MultiWeighmentPage';
 import { WeighInPage } from './pages/WeighInPage';
 import { WeighOutPage } from './pages/WeighOutPage';
+import { CheckingPage } from './pages/CheckingPage';
+import { ExitGatePage } from './pages/ExitGatePage';
+import { BayMasterPage } from './pages/BayMasterPage';
 import { ProductsPage, CustomersPage, SuppliersPage, VehiclesPage } from './pages/MasterDataPage';
 import {
   TicketsPage, TransactionsPage, DailySummaryPage,
@@ -88,7 +91,7 @@ export function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   /** Active page/screen (replaces MDI child form activation) */
-  const [activePage, setActivePage] = useState<PageId>('dashboard');
+  const [activePage, setActivePage] = useState<PageId>('vehicle-entry');
 
   /** Master data state — replaces direct DB reads per form */
   const [products, setProducts] = useState(sampleProducts);
@@ -98,6 +101,7 @@ export function App() {
   const [roles, setRoles] = useState<RoleMaster[]>(sampleRoles);
   const [users, setUsers] = useState(sampleUsers);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+  const [bays, setBays] = useState<BayMaster[]>(sampleBays);
 
   /** Tickets — the core transactional data */
   const [tickets, setTickets] = useState<Ticket[]>(() => generateSampleTickets());
@@ -125,6 +129,73 @@ export function App() {
     setDeliveryOrders(prev => [order, ...prev]);
     if (order.vehicleEntryId) {
       setVehicleEntries(prev => prev.map(e => e.id === order.vehicleEntryId ? { ...e, vehicleStatus: 'planned' as const, deliveryOrderId: order.id } : e));
+    }
+  };
+
+  const handleUpdateDeliveryOrder = (updatedOrder: DeliveryOrderPlan) => {
+    setDeliveryOrders(prev => prev.map(d => (d.id === updatedOrder.id ? updatedOrder : d)));
+    if (updatedOrder.vehicleEntryId) {
+      setVehicleEntries(prev =>
+        prev.map(e => {
+          if (e.id === updatedOrder.vehicleEntryId) {
+            return {
+              ...e,
+              currentLocation: updatedOrder.currentLocation,
+              vehicleStatus: (updatedOrder.status === 'exited'
+                ? 'exited'
+                : updatedOrder.status === 'Checked'
+                ? 'checked'
+                : 'in_progress') as any,
+            };
+          }
+          return e;
+        })
+      );
+    }
+  };
+
+  const handleCompleteExit = (
+    doId: number,
+    exitData: {
+      exitWeightKg: number;
+      exitDecision: 'approved' | 'override_approved' | 'rejected';
+      exitOfficer: string;
+      exitNotes?: string;
+      exitedAt: string;
+    }
+  ) => {
+    setDeliveryOrders(prev =>
+      prev.map(d => {
+        if (d.id === doId) {
+          return {
+            ...d,
+            status: 'exited',
+            currentLocation: 'Exited Warehouse Premises',
+            exitWeightKg: exitData.exitWeightKg,
+            exitGateDecision: exitData.exitDecision,
+            exitGateOfficer: exitData.exitOfficer,
+            exitGateNotes: exitData.exitNotes,
+            exitedAt: exitData.exitedAt,
+          };
+        }
+        return d;
+      })
+    );
+
+    const targetDO = deliveryOrders.find(d => d.id === doId);
+    if (targetDO) {
+      setVehicleEntries(prev =>
+        prev.map(e => {
+          if (e.id === targetDO.vehicleEntryId || e.slipNo === targetDO.slipNo) {
+            return {
+              ...e,
+              vehicleStatus: 'exited',
+              currentLocation: 'Exited Warehouse Premises',
+            };
+          }
+          return e;
+        })
+      );
     }
   };
 
@@ -179,7 +250,7 @@ export function App() {
    */
   const handleLogin = (user: User) => {
     setCurrentUser(user);
-    setActivePage('dashboard');
+    setActivePage('vehicle-entry');
   };
 
   /**
@@ -188,7 +259,7 @@ export function App() {
    */
   const handleLogout = () => {
     setCurrentUser(null);
-    setActivePage('dashboard');
+    setActivePage('vehicle-entry');
   };
 
   /**
@@ -283,9 +354,85 @@ export function App() {
             deliveryOrders={deliveryOrders}
             employees={warehouseEmployees}
             products={products}
+            bays={bays}
             selectedVehicleEntryId={targetVehicleEntryId}
             onSaveDeliveryOrder={handleSaveDeliveryOrder}
             onNavigateToWeighment={navigateToWeighment}
+          />
+        );
+
+      case 'weigh-in':
+        return (
+          <WeighInPage
+            products={products}
+            customers={customers}
+            suppliers={suppliers}
+            vehicles={vehicles}
+            deliveryOrders={deliveryOrders}
+            bays={bays}
+            operatorId={currentUser.id}
+            operatorName={currentUser.name}
+            onSave={handleWeighIn}
+            onUpdateDeliveryOrder={handleUpdateDeliveryOrder}
+            onNavigateToChecking={(doId) => {
+              setTargetDeliveryOrderId(doId);
+              setActivePage('checking');
+            }}
+          />
+        );
+
+      case 'weigh-out':
+        if (!settings.enableUnloading) {
+          return (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center max-w-lg mx-auto mt-12">
+              <h3 className="text-lg font-bold text-amber-800">Unloading Operations Disabled</h3>
+              <p className="text-sm text-slate-600 mt-2">
+                Unloading has been disabled in system configuration by the Administrator.
+              </p>
+              <button
+                onClick={() => setActivePage('dashboard')}
+                className="mt-4 px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-900"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          );
+        }
+        return (
+          <WeighOutPage
+            tickets={tickets}
+            deliveryOrders={deliveryOrders}
+            bays={bays}
+            onComplete={handleWeighOut}
+            onUpdateDeliveryOrder={handleUpdateDeliveryOrder}
+            onNavigateToChecking={(doId) => {
+              setTargetDeliveryOrderId(doId);
+              setActivePage('checking');
+            }}
+          />
+        );
+
+      case 'checking':
+        return (
+          <CheckingPage
+            deliveryOrders={deliveryOrders}
+            employees={warehouseEmployees}
+            currentUser={currentUser}
+            onUpdateDeliveryOrder={handleUpdateDeliveryOrder}
+            onNavigateToExitGate={(doId) => {
+              setTargetDeliveryOrderId(doId);
+              setActivePage('exit-gate');
+            }}
+          />
+        );
+
+      case 'exit-gate':
+        return (
+          <ExitGatePage
+            deliveryOrders={deliveryOrders}
+            vehicleEntries={vehicleEntries}
+            currentUser={currentUser}
+            onCompleteExit={handleCompleteExit}
           />
         );
 
@@ -300,40 +447,14 @@ export function App() {
           />
         );
 
-      case 'weigh-in':
+      case 'bay-master':
         return (
-          <WeighInPage
+          <BayMasterPage
+            bays={bays}
+            handlers={warehouseEmployees}
             products={products}
-            customers={customers}
-            suppliers={suppliers}
-            vehicles={vehicles}
-            operatorId={currentUser.id}
-            operatorName={currentUser.name}
-            onSave={handleWeighIn}
-          />
-        );
-
-      case 'weigh-out':
-        if (!settings.enableUnloading) {
-          return (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center max-w-lg mx-auto mt-12">
-              <h3 className="text-lg font-bold text-amber-800">Unloading Operations Disabled</h3>
-              <p className="text-sm text-slate-600 mt-2">
-                Unloading (Weigh Out) has been disabled in system configuration by the Administrator.
-              </p>
-              <button
-                onClick={() => setActivePage('dashboard')}
-                className="mt-4 px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-900"
-              >
-                Return to Dashboard
-              </button>
-            </div>
-          );
-        }
-        return (
-          <WeighOutPage
-            tickets={tickets}
-            onComplete={handleWeighOut}
+            onUpdateBays={setBays}
+            currentUserRole={currentUser.role}
           />
         );
 

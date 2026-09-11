@@ -24,7 +24,7 @@ import {
   Ticket, Package, Users2, Truck, Building2, Receipt,
   BarChart3, CalendarDays, UserCog, Settings, DatabaseBackup,
   Info, LogOut, ChevronLeft, ChevronRight, LogIn, ClipboardList, Layers,
-  ShieldCheck
+  ShieldCheck, DoorOpen, CheckSquare
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -60,9 +60,11 @@ const getMenuGroups = (enableUnloading: boolean = true): MenuGroup[] => [
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'vehicle-entry', label: 'Vehicle Entry', icon: LogIn },
       { id: 'planning', label: 'Planning & DO', icon: ClipboardList },
-      { id: 'multi-weighment', label: 'Multi-Weighment', icon: Layers },
       { id: 'weigh-in', label: 'Loading', icon: ArrowDownToLine },
       ...(enableUnloading ? [{ id: 'weigh-out' as PageId, label: 'Unloading', icon: ArrowUpFromLine }] : []),
+      { id: 'checking', label: 'Checking Section', icon: CheckSquare },
+      { id: 'exit-gate', label: 'Exit Gate', icon: DoorOpen },
+      { id: 'multi-weighment', label: 'Multi-Weighment', icon: Layers },
       { id: 'tickets', label: 'Tickets', icon: Ticket },
       { id: 'transactions', label: 'Transactions', icon: Receipt },
     ],
@@ -88,6 +90,7 @@ const getMenuGroups = (enableUnloading: boolean = true): MenuGroup[] => [
     items: [
       { id: 'users', label: 'User Management', icon: UserCog },
       { id: 'roles', label: 'Role Master', icon: ShieldCheck },
+      { id: 'bay-master', label: 'Bay Master', icon: Layers },
       { id: 'settings', label: 'Settings', icon: Settings },
       { id: 'audit-log', label: 'Audit Log', icon: DatabaseBackup },
       { id: 'backup', label: 'Backup', icon: DatabaseBackup },
