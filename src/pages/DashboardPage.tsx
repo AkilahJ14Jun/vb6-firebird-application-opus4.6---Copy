@@ -258,52 +258,6 @@ export function DashboardPage({ tickets, summary, user, onNavigate, enableUnload
           </div>
         </div>
 
-        {/* ── Recent Tickets ────────────────────────────────────────── */}
-        <div className="bg-white rounded-xl shadow border border-slate-200">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2">
-              <TicketIcon className="w-4 h-4 text-blue-500" />
-              Recent Tickets
-            </h3>
-            <button
-              onClick={() => onNavigate('tickets')}
-              className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
-            >
-              View All →
-            </button>
-          </div>
-          <div className="divide-y divide-slate-50">
-            {recentTickets.map((t) => (
-              <div key={t.id} className="p-3 hover:bg-slate-50 flex items-center gap-3">
-                <div className={cn(
-                  'w-2 h-2 rounded-full flex-shrink-0',
-                  t.status === 'open' ? 'bg-amber-500' : t.status === 'closed' ? 'bg-emerald-500' : 'bg-red-500'
-                )} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-slate-800">{t.ticketNo}</p>
-                    <span className={cn(
-                      'text-[10px] font-bold px-1.5 py-0.5 rounded',
-                      t.type === 'purchase' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
-                    )}>
-                      {t.type === 'purchase' ? 'BUY' : 'SELL'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 truncate">
-                    {t.vehiclePlateNo} · {t.productName} · {t.customerName || t.supplierName}
-                  </p>
-                </div>
-                <div className="text-right">
-                  {t.netWeight ? (
-                    <p className="text-sm font-semibold text-slate-700">{t.netWeight.toLocaleString()} kg</p>
-                  ) : (
-                    <p className="text-xs text-amber-500 font-medium">Pending</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* ── Weekly Summary ────────────────────────────────────────── */}

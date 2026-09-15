@@ -102,7 +102,8 @@ export function WeighOutPage({
   const handleCaptureFromScale = useCallback(() => {
     setCapturedWeight(liveScaleWeight);
     setManualWeightInput(liveScaleWeight.toString());
-  }, [liveScaleWeight]);
+    handleRecordItemWeight(liveScaleWeight);
+  }, [liveScaleWeight, currentDO, selectedBayNumber, selectedItemName, activeBayMaster]);
 
   const handleManualWeightChange = (val: string) => {
     setManualWeightInput(val);
@@ -136,10 +137,9 @@ export function WeighOutPage({
     setIsInsideBay(true);
   };
 
-  const handleRecordBayExit = () => {
+  const handleRecordItemWeight = (weightOverride?: number) => {
     if (!currentDO) return;
-    const exitNow = formatTime12();
-    const finalWeight = capturedWeight ?? Number(manualWeightInput) ?? 5000;
+    const finalWeight = weightOverride ?? capturedWeight ?? Number(manualWeightInput) ?? 5000;
 
     const updatedItems = currentDO.items.map(item => {
       if (item.bayNumber === selectedBayNumber && item.itemName === selectedItemName) {
@@ -147,7 +147,7 @@ export function WeighOutPage({
           ...item,
           actualLoadedWeightKg: finalWeight,
           pendingWeightKg: 0,
-          notes: `Unloaded at ${activeBayMaster?.bayName} (Entry: ${bayEntryTime}, Exit: ${exitNow})`,
+          notes: `Unloaded at ${activeBayMaster?.bayName}`,
         };
       }
       return item;
@@ -156,21 +156,38 @@ export function WeighOutPage({
     const updatedDO: DeliveryOrderPlan = {
       ...currentDO,
       items: updatedItems,
-      currentLocation: `Unloaded at ${activeBayMaster?.bayName} (${exitNow})`,
       status: 'in_progress',
     };
 
     onUpdateDeliveryOrder?.(updatedDO);
-    setIsInsideBay(false);
-    alert(`✓ Unloading recorded at ${exitNow}. Offloaded weight recorded: ${finalWeight.toLocaleString()} kg.`);
+    alert(`✓ Weight recorded. Offloaded ${finalWeight.toLocaleString()} kg of ${selectedItemName}.`);
   };
 
-  // Requirement 14 & 15: Finish Unloading Checkbox
+  const handleRecordBayExit = () => {
+    if (!currentDO) return;
+    const exitNow = formatTime12();
+
+    const updatedDO: DeliveryOrderPlan = {
+      ...currentDO,
+      currentLocation: `Departed ${activeBayMaster?.bayName} at ${exitNow}`,
+    };
+
+    onUpdateDeliveryOrder?.(updatedDO);
+    setIsInsideBay(false);
+    alert(`✓ Bay exit recorded at ${exitNow}.`);
+  };
+
+  // Requirement 14 & 15 & Pre-Final Check
+  const [preFinalCheck, setPreFinalCheck] = useState(false);
   const [finishUnloadingChecked, setFinishUnloadingChecked] = useState(false);
   const [unloadingCompletedSuccess, setUnloadingCompletedSuccess] = useState(false);
 
   const handleCompleteFinishUnloading = () => {
     if (!currentDO) return;
+    if (!preFinalCheck) {
+      alert('Please complete the pre-final check first.');
+      return;
+    }
     if (!finishUnloadingChecked) {
       alert('Please check the "Finish Unloading" checkbox to confirm completion of all tasks.');
       return;
@@ -479,10 +496,10 @@ export function WeighOutPage({
                       <button
                         type="button"
                         onClick={handleRecordBayExit}
-                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition flex items-center gap-2 shadow-xs"
+                        className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs transition flex items-center gap-2 shadow-xs"
                       >
                         <CheckCircle2 className="w-4 h-4" />
-                        Record Discharged Weight & Exit Bay
+                        Exit Bay
                       </button>
                     </div>
                   )}
@@ -569,6 +586,14 @@ export function WeighOutPage({
                         +12,000 kg
                       </button>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRecordItemWeight()}
+                      className="w-full mt-2 py-3 px-6 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-sm transition flex items-center justify-center gap-2 shadow-md"
+                    >
+                      <Scale className="w-5 h-5" />
+                      Record Manual Weight
+                    </button>
                   </div>
                 )}
               </div>
@@ -627,12 +652,26 @@ export function WeighOutPage({
                 <div className="flex items-center gap-3">
                   <input
                     type="checkbox"
+                    id="preFinalCheckbox"
+                    checked={preFinalCheck}
+                    onChange={e => setPreFinalCheck(e.target.checked)}
+                    className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor="preFinalCheckbox" className="text-xs font-bold text-slate-800 cursor-pointer">
+                    Pre-final Check — Verify all unloading items are complete for D.O {currentDO.doNumber}
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
                     id="finishUnloadingCheckbox"
                     checked={finishUnloadingChecked}
                     onChange={e => setFinishUnloadingChecked(e.target.checked)}
-                    className="w-5 h-5 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+                    disabled={!preFinalCheck}
+                    className="w-5 h-5 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer disabled:opacity-40"
                   />
-                  <label htmlFor="finishUnloadingCheckbox" className="text-xs font-bold text-slate-800 cursor-pointer">
+                  <label htmlFor="finishUnloadingCheckbox" className={cn("text-xs font-bold cursor-pointer", preFinalCheck ? "text-slate-800" : "text-slate-400")}>
                     Finish Unloading — Mark completion of all tasks for D.O {currentDO.doNumber}
                   </label>
                 </div>
@@ -644,7 +683,7 @@ export function WeighOutPage({
                   <button
                     type="button"
                     onClick={handleCompleteFinishUnloading}
-                    disabled={!finishUnloadingChecked}
+                    disabled={!finishUnloadingChecked || !preFinalCheck}
                     className="py-3 px-6 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold rounded-xl text-xs transition flex items-center gap-2 shadow-md shadow-purple-700/20"
                   >
                     <CheckCircle2 className="w-4 h-4" />

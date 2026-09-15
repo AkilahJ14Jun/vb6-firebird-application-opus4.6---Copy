@@ -65,8 +65,6 @@ const getMenuGroups = (enableUnloading: boolean = true): MenuGroup[] => [
       { id: 'checking', label: 'Checking Section', icon: CheckSquare },
       { id: 'exit-gate', label: 'Exit Gate', icon: DoorOpen },
       { id: 'multi-weighment', label: 'Multi-Weighment', icon: Layers },
-      { id: 'tickets', label: 'Tickets', icon: Ticket },
-      { id: 'transactions', label: 'Transactions', icon: Receipt },
     ],
   },
   {

@@ -22,14 +22,16 @@
 import { useState } from 'react';
 import { Scale, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import type { User } from '@/types';
-import { sampleUsers } from '@/store/appStore';
+
 
 interface LoginPageProps {
+  /** The current list of users to authenticate against */
+  users: User[];
   /** Called when login is successful, passes the authenticated user */
   onLogin: (user: User) => void;
 }
 
-export function LoginPage({ onLogin }: LoginPageProps) {
+export function LoginPage({ users, onLogin }: LoginPageProps) {
   /* ── Form State ──────────────────────────────────────────────────────── */
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -54,7 +56,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
 
     // Find user (in production: API call)
-    const user = sampleUsers.find(
+    const user = users.find(
       (u) => u.username.toLowerCase() === username.toLowerCase()
     );
 
@@ -81,7 +83,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   /** Quick login with a demo account */
   const quickLogin = (u: string) => {
-    const user = sampleUsers.find((x) => x.username === u);
+    const user = users.find((x) => x.username === u);
     if (user) onLogin(user);
   };
 

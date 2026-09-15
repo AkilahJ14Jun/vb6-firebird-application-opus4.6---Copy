@@ -45,7 +45,7 @@
  * ============================================================================
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type {
   User, Ticket, AppSettings, PageId,
   VehicleEntry, DeliveryOrderPlan, MultiWeighmentSession,
@@ -120,6 +120,19 @@ export function App() {
   const transactions = useMemo(() => generateTransactions(tickets), [tickets]);
   const dailySummary = useMemo(() => generateDailySummary(tickets), [tickets]);
   const auditLogs = useMemo(() => generateAuditLog(users), [users]);
+
+  const handleUpdateUsers = (newUsers: User[] | ((prev: User[]) => User[])) => {
+    setUsers(newUsers);
+  };
+
+  useEffect(() => {
+    if (currentUser) {
+      const updatedUser = users.find((u) => u.id === currentUser.id);
+      if (updatedUser && JSON.stringify(updatedUser) !== JSON.stringify(currentUser)) {
+        setCurrentUser(updatedUser);
+      }
+    }
+  }, [users, currentUser]);
 
   const handleSaveVehicleEntry = (entry: VehicleEntry) => {
     setVehicleEntries(prev => [entry, ...prev]);
@@ -499,7 +512,7 @@ export function App() {
         );
 
       case 'users':
-        return <UsersPage users={users} roles={roles} onUpdate={setUsers} />;
+        return <UsersPage users={users} roles={roles} onUpdate={handleUpdateUsers} />;
 
       case 'settings':
         return (
@@ -538,7 +551,7 @@ export function App() {
 
   // Not logged in → show login page (replaces frmLogin.Show vbModal)
   if (!currentUser) {
-    return <LoginPage onLogin={handleLogin} />;
+    return <LoginPage users={users} onLogin={handleLogin} />;
   }
 
   // Logged in → show sidebar + active page (replaces MDI form)
