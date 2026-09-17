@@ -17,14 +17,14 @@
  * ============================================================================
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Ticket, DeliveryOrderPlan, BayMaster } from '@/types';
 import { formatTime12, formatDuration, sampleBays } from '@/store/appStore';
 import { cn } from '@/utils/cn';
 import {
   Scale, ArrowUpFromLine, CheckCircle2, Clock, Truck, Layers,
   Check, AlertTriangle, ArrowRight, UserCheck, Package,
-  RotateCcw, MapPin, Search
+  RotateCcw, MapPin, Search, CheckSquare, Square
 } from 'lucide-react';
 
 interface WeighOutPageProps {
@@ -57,32 +57,75 @@ export function WeighOutPage({
 
   const currentDO = deliveryOrders.find(d => d.id === selectedDOId);
 
+  // Derive unique bays associated with the selected D.O
+  const doBays = useMemo(() => {
+    if (!currentDO || !currentDO.items || currentDO.items.length === 0) return [];
+    const map = new Map<number, { bayNumber: number; bayName: string; handlerName: string }>();
+    for (const item of currentDO.items) {
+      if (!map.has(item.bayNumber)) {
+        map.set(item.bayNumber, {
+          bayNumber: item.bayNumber,
+          bayName: item.bayName || `Bay #${item.bayNumber}`,
+          handlerName: item.handlerName || '',
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.bayNumber - b.bayNumber);
+  }, [currentDO]);
+
+  // Check if all items in a particular bay for current D.O are unloaded
+  const isBayComplete = useCallback((bayNum: number) => {
+    if (!currentDO || !currentDO.items || currentDO.items.length === 0) return false;
+    const itemsInBay = currentDO.items.filter(i => i.bayNumber === bayNum);
+    return itemsInBay.length > 0 && itemsInBay.every(i => (i.actualLoadedWeightKg || 0) > 0);
+  }, [currentDO]);
+
   // Requirement 13: Select each bay and item being unloaded
   const [selectedBayNumber, setSelectedBayNumber] = useState<number>(() => {
-    return currentDO?.items[0]?.bayNumber || availableBays[0]?.bayNumber || 1;
+    return currentDO?.items[0]?.bayNumber || doBays[0]?.bayNumber || availableBays[0]?.bayNumber || 1;
   });
 
-  const activeBayMaster = availableBays.find(b => b.bayNumber === selectedBayNumber) || availableBays[0];
+  // Items associated with the selected Bay for this D.O
+  const doBayItems = useMemo(() => {
+    if (!currentDO || !currentDO.items) return [];
+    return currentDO.items.filter(i => i.bayNumber === selectedBayNumber);
+  }, [currentDO, selectedBayNumber]);
+
+  const activeBayMaster = availableBays.find(b => b.bayNumber === selectedBayNumber) || {
+    id: selectedBayNumber,
+    bayNumber: selectedBayNumber,
+    bayName: doBays.find(b => b.bayNumber === selectedBayNumber)?.bayName || `Bay #${selectedBayNumber}`,
+    items: doBayItems.map(i => i.itemName),
+    handlerName: doBayItems[0]?.handlerName || 'Assigned Handler',
+    isActive: true,
+  };
 
   const [selectedItemName, setSelectedItemName] = useState<string>(() => {
-    return activeBayMaster?.items[0] || 'Scrap Steel';
+    return doBayItems[0]?.itemName || currentDO?.items[0]?.itemName || 'Scrap Steel';
   });
 
+  // When selected DO changes, synchronize bay & item selection to remaining items
   useEffect(() => {
     if (currentDO && currentDO.items.length > 0) {
-      const firstBay = currentDO.items[0].bayNumber;
-      setSelectedBayNumber(firstBay);
-      const bayData = availableBays.find(b => b.bayNumber === firstBay);
-      setSelectedItemName(currentDO.items[0].itemName || bayData?.items[0] || 'Scrap Steel');
+      const firstIncompleteBay = currentDO.items.find(i => !((i.actualLoadedWeightKg || 0) > 0))?.bayNumber;
+      const targetBay = firstIncompleteBay ?? currentDO.items[0].bayNumber;
+      setSelectedBayNumber(targetBay);
+
+      const itemsInTargetBay = currentDO.items.filter(i => i.bayNumber === targetBay);
+      const firstIncompleteItem = itemsInTargetBay.find(i => !((i.actualLoadedWeightKg || 0) > 0))?.itemName;
+      setSelectedItemName(firstIncompleteItem || itemsInTargetBay[0]?.itemName || '');
     }
   }, [currentDO?.id]);
 
+  // When bay changes, pick first incomplete item for that bay if possible
   const handleSelectBay = (bayNum: number) => {
     setSelectedBayNumber(bayNum);
-    const bayData = availableBays.find(b => b.bayNumber === bayNum);
-    if (bayData && bayData.items.length > 0) {
-      const plannedForThisBay = currentDO?.items.find(i => i.bayNumber === bayNum);
-      setSelectedItemName(plannedForThisBay?.itemName || bayData.items[0]);
+    if (currentDO && currentDO.items.length > 0) {
+      const itemsInThisBay = currentDO.items.filter(i => i.bayNumber === bayNum);
+      if (itemsInThisBay.length > 0) {
+        const firstIncomplete = itemsInThisBay.find(i => !((i.actualLoadedWeightKg || 0) > 0));
+        setSelectedItemName(firstIncomplete?.itemName || itemsInThisBay[0]?.itemName || '');
+      }
     }
   };
 
@@ -409,55 +452,259 @@ export function WeighOutPage({
                 </div>
               </div>
 
-              {/* Requirement 13: Select Bay & Item for Unloading based on Bay Master */}
+              {/* Requirement 13 & Updated Requirements: Select Bay & Item associated with D.O only */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-purple-600" />
-                  Bay & Item Selection (Unloading Master)
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-purple-600" />
+                    Unloading Bays & Items for D.O {currentDO.doNumber}
+                  </h4>
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    {doBays.filter(b => isBayComplete(b.bayNumber)).length}/{doBays.length} Bays Completed
+                  </span>
+                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Select Bay */}
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                      Unloading Bay *
-                    </label>
-                    <select
-                      value={selectedBayNumber}
-                      onChange={e => handleSelectBay(Number(e.target.value))}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none"
-                    >
-                      {availableBays.map(b => (
-                        <option key={b.id} value={b.bayNumber}>
-                          Bay #{b.bayNumber}: {b.bayName}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1">
-                      <UserCheck className="w-3.5 h-3.5 text-purple-600" />
-                      <span>Handler Assigned: <strong>{activeBayMaster?.handlerName}</strong></span>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {/* Select Bay Column */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                        Unloading Bay (Associated with D.O) *
+                      </label>
+                      <select
+                        value={selectedBayNumber}
+                        onChange={e => handleSelectBay(Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none"
+                      >
+                        {doBays.length === 0 ? (
+                          <option value="">No bays assigned for this D.O</option>
+                        ) : (
+                          doBays.map(b => {
+                            const complete = isBayComplete(b.bayNumber);
+                            return (
+                              <option key={b.bayNumber} value={b.bayNumber}>
+                                Bay #{b.bayNumber}: {b.bayName} {complete ? '— [✓ Complete]' : '— [Pending]'}
+                              </option>
+                            );
+                          })
+                        )}
+                      </select>
+                      <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1">
+                        <UserCheck className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Handler Assigned: <strong>{activeBayMaster?.handlerName || 'Assigned Handler'}</strong></span>
+                      </div>
+                    </div>
+
+                    {/* Associated Bays List & Remaining/Completion Status below Bay Dropdown */}
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 uppercase">
+                        <span>Unloading Bays for this D.O</span>
+                        <span>Status</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {doBays.map(bay => {
+                          const complete = isBayComplete(bay.bayNumber);
+                          const itemsInBay = currentDO.items.filter(i => i.bayNumber === bay.bayNumber);
+                          const isSelected = selectedBayNumber === bay.bayNumber;
+                          const remainingItems = itemsInBay.filter(i => !((i.actualLoadedWeightKg || 0) > 0));
+
+                          return (
+                            <div
+                              key={bay.bayNumber}
+                              onClick={() => handleSelectBay(bay.bayNumber)}
+                              className={cn(
+                                'p-2.5 rounded-lg border text-left cursor-pointer transition-all',
+                                isSelected
+                                  ? 'bg-purple-50/80 border-purple-400 ring-1 ring-purple-300'
+                                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/80'
+                              )}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="min-w-0">
+                                  <span className="font-bold text-xs text-slate-900">
+                                    Bay #{bay.bayNumber}: {bay.bayName}
+                                  </span>
+                                  <p className="text-[10px] text-slate-500">
+                                    {itemsInBay.length} item{itemsInBay.length > 1 ? 's' : ''} to unload • Handler: {bay.handlerName || 'Assigned Handler'}
+                                  </p>
+                                </div>
+                                {isSelected && (
+                                  <span className="text-[10px] bg-purple-600 text-white font-bold px-1.5 py-0.5 rounded">
+                                    Selected
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Bay Completion indicator with checkbox with tick below the bay */}
+                              <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                                {complete ? (
+                                  <label className="inline-flex items-center gap-1.5 text-purple-700 bg-purple-100/70 border border-purple-300 px-2 py-0.5 rounded text-[11px] font-bold cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={true}
+                                      readOnly
+                                      className="w-3.5 h-3.5 text-purple-600 rounded accent-purple-600 cursor-pointer"
+                                    />
+                                    <span>Complete (All items unloaded) ✓</span>
+                                  </label>
+                                ) : (
+                                  <label className="inline-flex items-center gap-1.5 text-amber-800 bg-amber-100/70 border border-amber-300 px-2 py-0.5 rounded text-[11px] font-semibold cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={false}
+                                      readOnly
+                                      className="w-3.5 h-3.5 text-slate-300 rounded cursor-pointer"
+                                    />
+                                    <span>Remaining to unload ({remainingItems.length} item{remainingItems.length > 1 ? 's' : ''})</span>
+                                  </label>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Remaining Bays Quick Helper */}
+                      {doBays.some(b => !isBayComplete(b.bayNumber)) ? (
+                        <div className="p-2 bg-amber-50/80 border border-amber-200 rounded-lg text-[11px] text-amber-900">
+                          <span className="font-bold">Bays remaining to unload: </span>
+                          <span className="font-medium">
+                            {doBays
+                              .filter(b => !isBayComplete(b.bayNumber))
+                              .map(b => `Bay #${b.bayNumber} (${b.bayName})`)
+                              .join(', ')}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="p-2 bg-purple-50 border border-purple-200 rounded-lg text-[11px] text-purple-900 font-bold flex items-center gap-1.5">
+                          <Check className="w-4 h-4 text-purple-600" />
+                          <span>All bays completed for D.O {currentDO.doNumber}!</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Select Item */}
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                      Item Being Discharged / Unloaded *
-                    </label>
-                    <select
-                      value={selectedItemName}
-                      onChange={e => setSelectedItemName(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none"
-                    >
-                      {activeBayMaster?.items.map((item, idx) => (
-                        <option key={idx} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Select item designated for offloading at Bay #{activeBayMaster?.bayNumber}.
-                    </p>
+                  {/* Select Item Column */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                        Item Being Discharged / Unloaded in Bay #{selectedBayNumber} *
+                      </label>
+                      <select
+                        value={selectedItemName}
+                        onChange={e => setSelectedItemName(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none"
+                      >
+                        {doBayItems.length === 0 ? (
+                          <option value="">No items planned for this Bay in D.O</option>
+                        ) : (
+                          doBayItems.map((item, idx) => {
+                            const isUnloaded = (item.actualLoadedWeightKg || 0) > 0;
+                            return (
+                              <option key={idx} value={item.itemName}>
+                                {item.itemName} — {item.plannedWeightKg.toLocaleString()} kg {isUnloaded ? '(✓ Unloaded)' : '(Pending)'}
+                              </option>
+                            );
+                          })
+                        )}
+                      </select>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Showing only items designated for offloading at Bay #{selectedBayNumber} in D.O {currentDO.doNumber}.
+                      </p>
+                    </div>
+
+                    {/* Associated Items List & Remaining Status below Item Dropdown */}
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 uppercase">
+                        <span>Items in Bay #{selectedBayNumber}</span>
+                        <span>Unload Status</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {doBayItems.length === 0 ? (
+                          <div className="p-3 bg-white border border-slate-200 rounded-lg text-xs text-slate-400 text-center">
+                            No items designated for offloading at Bay #{selectedBayNumber}.
+                          </div>
+                        ) : (
+                          doBayItems.map((item, idx) => {
+                            const isUnloaded = (item.actualLoadedWeightKg || 0) > 0;
+                            const isSelected = selectedItemName === item.itemName;
+
+                            return (
+                              <div
+                                key={idx}
+                                onClick={() => setSelectedItemName(item.itemName)}
+                                className={cn(
+                                  'p-2.5 rounded-lg border text-left cursor-pointer transition-all',
+                                  isSelected
+                                    ? 'bg-purple-50/80 border-purple-400 ring-1 ring-purple-300'
+                                    : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/80'
+                                )}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="min-w-0">
+                                    <span className="font-bold text-xs text-slate-900">
+                                      {item.itemName}
+                                    </span>
+                                    <p className="text-[10px] font-mono text-slate-500">
+                                      Planned: {item.plannedWeightKg.toLocaleString()} kg
+                                    </p>
+                                  </div>
+                                  {isSelected && (
+                                    <span className="text-[10px] bg-purple-600 text-white font-bold px-1.5 py-0.5 rounded">
+                                      Selected
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                                  {isUnloaded ? (
+                                    <label className="inline-flex items-center gap-1.5 text-purple-700 bg-purple-100/70 border border-purple-300 px-2 py-0.5 rounded text-[11px] font-bold cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={true}
+                                        readOnly
+                                        className="w-3.5 h-3.5 text-purple-600 rounded accent-purple-600 cursor-pointer"
+                                      />
+                                      <span>Unloaded: {item.actualLoadedWeightKg?.toLocaleString()} kg ✓</span>
+                                    </label>
+                                  ) : (
+                                    <label className="inline-flex items-center gap-1.5 text-amber-800 bg-amber-100/70 border border-amber-300 px-2 py-0.5 rounded text-[11px] font-semibold cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={false}
+                                        readOnly
+                                        className="w-3.5 h-3.5 text-slate-300 rounded cursor-pointer"
+                                      />
+                                      <span>Remaining to unload: {item.plannedWeightKg.toLocaleString()} kg</span>
+                                    </label>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+
+                      {/* Items Remaining in this Bay or other Bays */}
+                      {currentDO.items.some(i => !((i.actualLoadedWeightKg || 0) > 0)) ? (
+                        <div className="p-2 bg-blue-50/80 border border-blue-200 rounded-lg text-[11px] text-blue-900">
+                          <span className="font-bold">Total remaining items for D.O: </span>
+                          <span className="font-medium">
+                            {currentDO.items
+                              .filter(i => !((i.actualLoadedWeightKg || 0) > 0))
+                              .map(i => `${i.itemName} in Bay #${i.bayNumber} (${i.plannedWeightKg.toLocaleString()} kg)`)
+                              .join(', ')}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="p-2 bg-purple-50 border border-purple-200 rounded-lg text-[11px] text-purple-900 font-bold flex items-center gap-1.5">
+                          <Check className="w-4 h-4 text-purple-600" />
+                          <span>All items unloaded for D.O {currentDO.doNumber}!</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

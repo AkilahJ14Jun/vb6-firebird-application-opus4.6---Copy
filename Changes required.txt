@@ -2,8 +2,7 @@ Understand the application and this code base by going through the content in 'g
 
 Following changes are required in this application.
 
-Modified the user name in 'User Management' page. When i made this change for the logged in user , wanted to ensure that it reflects in the application. So logged out of the application from Admin user session. But it still does the name change made in the 'User Management' page for that user.
-
+Currently in 'Loading' and 'Unloading' pages the application allows to load or unload items from specific bays only according the D.O. Now the system should show only the list of bays associated and the items to be loaded for each D.O. When all items are loaded or unloaded the particular bay should  show as complete with a checkbox with a tick below it. The bays or items remaining to be loaded or unloaded should always appear below the respective drop downs to help the user in selecting the bay and items from the list , for a particular D.O.
  
  
 
